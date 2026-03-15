@@ -1,0 +1,8 @@
+{
+  "name": "CabWise",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "author": "Your Name",
+  "description": "Smart cab aggregator for the UK - compare prices across Uber, Bolt, Free Now, Wheely"
+}

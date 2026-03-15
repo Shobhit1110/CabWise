@@ -1,0 +1,17 @@
+.env.local
+.env.*.local
+node_modules/
+.expo/
+ios/
+android/
+build/
+dist/
+.DS_Store
+.vscode/settings.json
+*.swp
+*.swo
+npm-debug.log
+yarn-error.log
+.env
+*.ipa
+*.apk
