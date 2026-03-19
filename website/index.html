@@ -62,6 +62,14 @@
       border-color: var(--brand);
     }
 
+    /* Hide custom cursor on touch / mobile devices */
+    @media (hover: none), (pointer: coarse) {
+      * { cursor: auto !important; }
+      a { cursor: pointer !important; }
+      button { cursor: pointer !important; }
+      .cursor-dot, .cursor-ring { display: none !important; }
+    }
+
     /* Scroll Progress Bar */
     .scroll-progress {
       position: fixed;
@@ -2529,38 +2537,40 @@
     /* ============================================================
        CUSTOM CURSOR
     ============================================================ */
+    const isTouchDevice = window.matchMedia('(hover: none)').matches || window.matchMedia('(pointer: coarse)').matches;
     const cursorDot = document.getElementById('cursorDot');
     const cursorRing = document.getElementById('cursorRing');
-    let cursorX = 0, cursorY = 0, ringX = 0, ringY = 0;
 
-    document.addEventListener('mousemove', (e) => {
-      cursorX = e.clientX;
-      cursorY = e.clientY;
-      cursorDot.style.left = cursorX + 'px';
-      cursorDot.style.top = cursorY + 'px';
-    });
+    if (!isTouchDevice) {
+      let cursorX = 0, cursorY = 0, ringX = 0, ringY = 0;
 
-    // Smooth follow for ring
-    function animateCursorRing() {
-      ringX += (cursorX - ringX) * 0.12;
-      ringY += (cursorY - ringY) * 0.12;
-      cursorRing.style.left = ringX + 'px';
-      cursorRing.style.top = ringY + 'px';
-      requestAnimationFrame(animateCursorRing);
+      document.addEventListener('mousemove', (e) => {
+        cursorX = e.clientX;
+        cursorY = e.clientY;
+        cursorDot.style.left = cursorX + 'px';
+        cursorDot.style.top = cursorY + 'px';
+      });
+
+      function animateCursorRing() {
+        ringX += (cursorX - ringX) * 0.12;
+        ringY += (cursorY - ringY) * 0.12;
+        cursorRing.style.left = ringX + 'px';
+        cursorRing.style.top = ringY + 'px';
+        requestAnimationFrame(animateCursorRing);
+      }
+      animateCursorRing();
+
+      document.querySelectorAll('a, button, .btn, .store-btn, .nav-cta, .feature-card, .testimonial-card, .step, .comparison-card').forEach(el => {
+        el.addEventListener('mouseenter', () => {
+          cursorDot.classList.add('hovering');
+          cursorRing.classList.add('hovering');
+        });
+        el.addEventListener('mouseleave', () => {
+          cursorDot.classList.remove('hovering');
+          cursorRing.classList.remove('hovering');
+        });
+      });
     }
-    animateCursorRing();
-
-    // Hover detection for interactives
-    document.querySelectorAll('a, button, .btn, .store-btn, .nav-cta, .feature-card, .testimonial-card, .step, .comparison-card').forEach(el => {
-      el.addEventListener('mouseenter', () => {
-        cursorDot.classList.add('hovering');
-        cursorRing.classList.add('hovering');
-      });
-      el.addEventListener('mouseleave', () => {
-        cursorDot.classList.remove('hovering');
-        cursorRing.classList.remove('hovering');
-      });
-    });
 
     /* ============================================================
        SCROLL PROGRESS BAR — variable setup (merged listener below)
