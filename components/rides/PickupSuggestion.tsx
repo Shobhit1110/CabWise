@@ -1,5 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { useThemeStore, spacing, radii, typography, shadows } from '../../store/themeStore';
+import { useScaleIn, usePressAnimation } from '../../utils/animations';
 import type { PickupPoint, LatLng } from '../../types';
 
 interface PickupSuggestionProps {
@@ -9,51 +12,95 @@ interface PickupSuggestionProps {
   onReset: () => void;
 }
 
+function PickupCard({
+  point,
+  isSelected,
+  onSelect,
+  index,
+}: {
+  point: PickupPoint;
+  isSelected: boolean;
+  onSelect: () => void;
+  index: number;
+}) {
+  const { colors } = useThemeStore();
+  const scaleStyle = useScaleIn(index * 80);
+  const { animatedStyle: pressStyle, onPressIn, onPressOut } = usePressAnimation();
+
+  return (
+    <Animated.View style={[scaleStyle, pressStyle]}>
+      <Pressable
+        style={[
+          styles.card,
+          { backgroundColor: colors.card, shadowColor: colors.shadow },
+          isSelected && { borderColor: colors.success, borderWidth: 2, backgroundColor: colors.successSoft },
+        ]}
+        onPress={onSelect}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel={`${point.name}, ${point.walkMinutes < 1 ? 'under 1' : Math.round(point.walkMinutes)} minute walk, save £${point.avgSavingGBP.toFixed(2)}${isSelected ? ', selected' : ''}`}
+        accessibilityHint="Double tap to set as pickup point"
+        accessibilityState={{ selected: isSelected }}
+      >
+        <View style={[styles.walkBadge, { backgroundColor: isSelected ? colors.success : colors.chipBg }]}>
+          <Text style={[styles.walkIcon, { color: isSelected ? '#fff' : colors.textSecondary }]}>↦</Text>
+          <Text style={[styles.walkTime, { color: isSelected ? '#fff' : colors.textSecondary }]}>
+            {point.walkMinutes < 1 ? '<1' : Math.round(point.walkMinutes)} min
+          </Text>
+        </View>
+        <Text style={[styles.cardName, { color: colors.text }]} numberOfLines={1}>
+          {point.name}
+        </Text>
+        <View style={styles.savingsRow}>
+          <Text style={[styles.saving, { color: colors.success }]}>
+            Save £{point.avgSavingGBP.toFixed(2)}
+          </Text>
+        </View>
+        <Text style={[styles.distance, { color: colors.textMuted }]}>
+          {point.distanceMetres}m away
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 export function PickupSuggestion({
   points,
   selectedId,
   onSelect,
   onReset,
 }: PickupSuggestionProps) {
+  const { colors } = useThemeStore();
   if (points.length === 0) return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Smart Pickup Points</Text>
+        <View>
+          <Text style={[styles.title, { color: colors.text }]}>Smart Pickup</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>Walk a bit, save more</Text>
+        </View>
         {selectedId && (
-          <Pressable onPress={onReset}>
-            <Text style={styles.reset}>Use my location</Text>
+          <Pressable onPress={onReset} style={[styles.resetBtn, { backgroundColor: colors.chipBg }]}>
+            <Text style={[styles.resetText, { color: colors.accent }]}>◉ My location</Text>
           </Pressable>
         )}
       </View>
-      <Text style={styles.subtitle}>Walk a bit, save on your ride</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
       >
-        {points.map((p) => (
-          <Pressable
+        {points.map((p, i) => (
+          <PickupCard
             key={p.id}
-            style={[styles.card, selectedId === p.id && styles.cardActive]}
-            onPress={() => onSelect(p)}
-          >
-            <Text style={styles.cardName} numberOfLines={1}>
-              {p.name}
-            </Text>
-            <View style={styles.cardRow}>
-              <Text style={styles.saving}>Save £{p.avgSavingGBP.toFixed(1)}</Text>
-            </View>
-            <View style={styles.cardRow}>
-              <Text style={styles.detail}>
-                {Math.round(p.avgWalkSecs / 60)} min walk
-              </Text>
-              <Text style={styles.dot}>·</Text>
-              <Text style={styles.detail}>{p.distanceMetres}m</Text>
-            </View>
-          </Pressable>
+            point={p}
+            isSelected={selectedId === p.id}
+            onSelect={() => onSelect(p)}
+            index={i}
+          />
         ))}
       </ScrollView>
     </View>
@@ -62,71 +109,75 @@ export function PickupSuggestion({
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 12,
+    marginTop: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.md,
   },
   title: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111',
+    ...typography.headline,
+    fontSize: 16,
   },
   subtitle: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
     marginTop: 2,
-    marginBottom: 8,
   },
-  reset: {
-    fontSize: 12,
-    color: '#3b82f6',
+  resetBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+  },
+  resetText: {
+    ...typography.caption,
     fontWeight: '600',
   },
   scroll: {
-    marginHorizontal: -16,
+    marginHorizontal: -spacing.lg,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   card: {
-    backgroundColor: '#f8faf8',
-    borderRadius: 10,
-    padding: 12,
-    minWidth: 140,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    minWidth: 150,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: 'transparent',
+    ...shadows.sm,
   },
-  cardActive: {
-    borderColor: '#10b981',
-    backgroundColor: '#ecfdf5',
-  },
-  cardName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111',
-    marginBottom: 6,
-  },
-  cardRow: {
+  walkBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    gap: 3,
+    marginBottom: spacing.sm,
+  },
+  walkIcon: {
+    fontSize: 12,
+  },
+  walkTime: {
+    ...typography.micro,
+  },
+  cardName: {
+    ...typography.callout,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  savingsRow: {
+    marginBottom: 2,
   },
   saving: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#10b981',
+    fontSize: 16,
+    fontWeight: '800',
   },
-  detail: {
-    fontSize: 11,
-    color: '#666',
-  },
-  dot: {
-    fontSize: 11,
-    color: '#ccc',
-    marginHorizontal: 4,
+  distance: {
+    ...typography.micro,
   },
 });

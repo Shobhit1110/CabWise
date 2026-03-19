@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Constants from 'expo-constants';
+import { useThemeStore, spacing, radii, typography } from '../../store/themeStore';
 import type { LatLng } from '../../types';
 
 interface Destination {
@@ -49,7 +51,7 @@ async function searchPlaces(query: string): Promise<Destination[]> {
     id: p.place_id,
     name: p.structured_formatting.main_text,
     area: p.structured_formatting.secondary_text || '',
-    location: null, // resolved on select via Place Details
+    location: null,
   }));
 }
 
@@ -79,10 +81,10 @@ export function DestinationSearch({ onSelect, currentLabel }: DestinationSearchP
   const [apiResults, setApiResults] = useState<Destination[]>([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { colors } = useThemeStore();
 
   const hasApiKey = MAPS_KEY && MAPS_KEY !== 'AIza...';
 
-  // Debounced Places autocomplete
   useEffect(() => {
     if (!hasApiKey || query.length < 3) {
       setApiResults([]);
@@ -100,7 +102,6 @@ export function DestinationSearch({ onSelect, currentLabel }: DestinationSearchP
     };
   }, [query]);
 
-  // Fallback: filter hardcoded list when no API key
   const localResults = query
     ? POPULAR.filter(
         (d) =>
@@ -113,7 +114,6 @@ export function DestinationSearch({ onSelect, currentLabel }: DestinationSearchP
 
   const handleSelect = async (dest: Destination) => {
     if (!dest.location && dest.id) {
-      // Resolve lat/lng from Google Place Details
       const loc = await getPlaceLocation(dest.id);
       if (loc) {
         onSelect(loc, dest.name);
@@ -129,11 +129,20 @@ export function DestinationSearch({ onSelect, currentLabel }: DestinationSearchP
   if (currentLabel && !expanded) {
     return (
       <Pressable style={styles.selected} onPress={() => setExpanded(true)}>
-        <View style={[styles.dot, styles.dotDest]} />
-        <Text style={styles.selectedText} numberOfLines={1}>
-          {currentLabel}
-        </Text>
-        <Text style={styles.change}>Change</Text>
+        <View style={styles.destIconCol}>
+          <View style={[styles.destDot, { backgroundColor: colors.danger }]}>
+            <View style={styles.destDotInner} />
+          </View>
+        </View>
+        <View style={styles.selectedTextCol}>
+          <Text style={[styles.typeLabel, { color: colors.textMuted }]}>DROP-OFF</Text>
+          <Text style={[styles.selectedText, { color: colors.text }]} numberOfLines={1}>
+            {currentLabel}
+          </Text>
+        </View>
+        <View style={[styles.changeBadge, { backgroundColor: colors.accentSoft }]}>
+          <Text style={[styles.changeText, { color: colors.accent }]}>Change</Text>
+        </View>
       </Pressable>
     );
   }
@@ -141,46 +150,57 @@ export function DestinationSearch({ onSelect, currentLabel }: DestinationSearchP
   return (
     <View style={styles.container}>
       <View style={styles.inputRow}>
-        <View style={[styles.dot, styles.dotDest]} />
-        <TextInput
-          style={styles.input}
-          placeholder="Where to?"
-          placeholderTextColor="#999"
-          value={query}
-          onChangeText={setQuery}
-          onFocus={() => setExpanded(true)}
-        />
+        <View style={styles.destIconCol}>
+          <View style={[styles.destDot, { backgroundColor: colors.danger }]}>
+            <View style={styles.destDotInner} />
+          </View>
+        </View>
+        <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg }]}>
+          <TextInput
+            style={[styles.input, { color: colors.text }]}
+            placeholder="Where to?"
+            placeholderTextColor={colors.textMuted}
+            value={query}
+            onChangeText={setQuery}
+            onFocus={() => setExpanded(true)}
+          />
+        </View>
         {expanded && (
           <Pressable
-            onPress={() => {
-              setExpanded(false);
-              setQuery('');
-            }}
+            onPress={() => { setExpanded(false); setQuery(''); }}
+            style={[styles.cancelBtn, { backgroundColor: colors.chipBg }]}
           >
-            <Text style={styles.cancel}>Cancel</Text>
+            <Text style={[styles.cancelText, { color: colors.textSecondary }]}>✕</Text>
           </Pressable>
         )}
       </View>
       {expanded && (
-        <View style={styles.dropdown}>
-          <Text style={styles.sectionTitle}>
-            {hasApiKey && query.length >= 3 ? 'Search results' : 'Popular destinations'}
+        <View style={[styles.dropdown, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+            {hasApiKey && query.length >= 3 ? 'SEARCH RESULTS' : 'POPULAR DESTINATIONS'}
           </Text>
           {searching && (
-            <ActivityIndicator size="small" color="#3b82f6" style={{ marginVertical: 12 }} />
+            <ActivityIndicator size="small" color={colors.accent} style={{ marginVertical: spacing.md }} />
           )}
           {!searching && results.map((d) => (
             <Pressable
               key={d.id}
-              style={styles.item}
+              style={[styles.item, { borderBottomColor: colors.borderLight }]}
               onPress={() => handleSelect(d)}
+              accessibilityRole="button"
+              accessibilityLabel={`${d.name}, ${d.area}`}
             >
-              <Text style={styles.itemName}>{d.name}</Text>
-              <Text style={styles.itemArea}>{d.area}</Text>
+              <View style={[styles.itemIcon, { backgroundColor: colors.chipBg }]}>
+                <Text style={styles.itemEmoji}>📍</Text>
+              </View>
+              <View style={styles.itemText}>
+                <Text style={[styles.itemName, { color: colors.text }]}>{d.name}</Text>
+                <Text style={[styles.itemArea, { color: colors.textMuted }]}>{d.area}</Text>
+              </View>
             </Pressable>
           ))}
           {!searching && results.length === 0 && (
-            <Text style={styles.empty}>No matching destinations</Text>
+            <Text style={[styles.empty, { color: colors.textMuted }]}>No matching destinations</Text>
           )}
         </View>
       )}
@@ -189,83 +209,128 @@ export function DestinationSearch({ onSelect, currentLabel }: DestinationSearchP
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
+  container: {},
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 12,
+  destIconCol: {
+    width: 24,
+    alignItems: 'center',
   },
-  dotDest: {
-    backgroundColor: '#ef4444',
+  destDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  destDotInner: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  searchIcon: {
+    fontSize: 14,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: '#111',
-    paddingVertical: 4,
+    ...typography.body,
+    paddingVertical: 2,
   },
-  cancel: {
+  cancelBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelText: {
     fontSize: 14,
-    color: '#666',
-    marginLeft: 8,
+    fontWeight: '600',
   },
   selected: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  selectedTextCol: {
+    flex: 1,
+  },
+  typeLabel: {
+    ...typography.micro,
+    letterSpacing: 1,
+    marginBottom: 2,
   },
   selectedText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#111',
+    ...typography.body,
+    fontWeight: '500',
   },
-  change: {
-    fontSize: 13,
-    color: '#3b82f6',
+  changeBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+  },
+  changeText: {
+    ...typography.caption,
     fontWeight: '600',
   },
   dropdown: {
-    paddingBottom: 8,
+    paddingBottom: spacing.sm,
+    borderRadius: radii.md,
+    marginTop: spacing.xs,
   },
   sectionTitle: {
-    fontSize: 11,
-    color: '#999',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    marginTop: 4,
+    ...typography.micro,
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   item: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#f0f0f0',
+    gap: spacing.md,
+  },
+  itemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemEmoji: {
+    fontSize: 16,
+  },
+  itemText: {
+    flex: 1,
   },
   itemName: {
-    fontSize: 15,
-    color: '#111',
+    ...typography.body,
+    fontWeight: '500',
   },
   itemArea: {
-    fontSize: 12,
-    color: '#999',
+    ...typography.caption,
+    marginTop: 1,
   },
   empty: {
-    fontSize: 14,
-    color: '#999',
+    ...typography.callout,
     textAlign: 'center',
-    paddingVertical: 16,
+    paddingVertical: spacing.lg,
   },
 });

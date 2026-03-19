@@ -1,10 +1,24 @@
-import React from 'react';
-import { Platform, View, Text } from 'react-native';
+import React, { useEffect } from 'react';
+import { AppState, Platform, View, Text, ActivityIndicator } from 'react-native';
 import { Stack } from 'expo-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Sentry from '@sentry/react-native';
+import { useThemeStore } from '../store/themeStore';
+import { useOnboardingStore } from '../store/onboardingStore';
+import { useAlertStore } from '../store/alertStore';
+import { useAuthStore } from '../store/authStore';
+import { AuthGate } from '../components/shared/AuthGate';
+import OnboardingScreen from './onboarding';
+
+// Pause React Query polling when app is backgrounded
+focusManager.setEventListener((handleFocus) => {
+  const sub = AppState.addEventListener('change', (state) => {
+    handleFocus(state === 'active');
+  });
+  return () => sub.remove();
+});
 
 const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || '';
 
@@ -60,18 +74,45 @@ class ErrorBoundary extends React.Component<
 }
 
 export default function RootLayout() {
+  const { colors } = useThemeStore();
+  const { hasCompletedOnboarding, loadState } = useOnboardingStore();
+  const { loadAlerts } = useAlertStore();
+  const loadUser = useAuthStore((s) => s.loadUser);
+
+  useEffect(() => {
+    loadState();
+    loadAlerts();
+    loadUser();
+  }, []);
+
+  // Still loading onboarding state from storage
+  if (hasCompletedOnboarding === null) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
             <SheetProvider>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: '#fff' },
-                }}
-              />
+              {hasCompletedOnboarding ? (
+                <>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: { backgroundColor: colors.bg },
+                    }}
+                  />
+                  <AuthGate />
+                </>
+              ) : (
+                <OnboardingScreen />
+              )}
             </SheetProvider>
           </QueryClientProvider>
         </SafeAreaProvider>

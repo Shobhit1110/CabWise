@@ -35,7 +35,14 @@
       "expo-location",
       "expo-font",
       "expo-dev-client",
-      "@sentry/react-native/expo"
+      "@sentry/react-native/expo",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#6366F1"
+        }
+      ]
     ],
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

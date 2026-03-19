@@ -41,7 +41,10 @@ export interface PickupPoint {
   location: LatLng;
   avgSavingGBP: number;
   avgWalkSecs: number;
+  walkMinutes: number;
   distanceMetres: number;
+  weeklyRides: number;
+  rating: number;
   score: number;
 }
 

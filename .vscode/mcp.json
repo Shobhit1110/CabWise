@@ -1,0 +1,25 @@
+{
+  "servers": {
+    "magic": {
+      "command": "npx",
+      "args": ["-y", "@21st-dev/magic@latest"],
+      "env": {
+        "API_KEY": "3561bf0b1344bf82c79c82643ccf9caf92eeecc67a12167ad0b01d42a09300a9"
+      }
+    },
+    "oraios/serena": {
+      "type": "stdio",
+      "command": "C:\\Users\\shobh\\.local\\bin\\uvx.exe",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide",
+        "--project",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}

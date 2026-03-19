@@ -1,0 +1,2890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CabWise — Compare Rides. Save Money. Ride Smart.</title>
+  <meta name="description" content="CabWise instantly compares fares across Uber, Bolt, FreeNow & more. Find the cheapest or fastest ride in seconds." />
+  <meta name="theme-color" content="#0a0a0b" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; background: #09090b; cursor: none; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: transparent;
+      color: #fafafa;
+      overflow-x: hidden;
+      line-height: 1.6;
+      cursor: none;
+    }
+    a { text-decoration: none; color: inherit; cursor: none; }
+    img { max-width: 100%; display: block; }
+    button { cursor: none; border: none; font-family: inherit; }
+
+    /* Custom Cursor */
+    .cursor-dot {
+      position: fixed;
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      transition: width 0.2s, height 0.2s, background 0.2s;
+      mix-blend-mode: difference;
+    }
+    .cursor-ring {
+      position: fixed;
+      width: 40px;
+      height: 40px;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9998;
+      transform: translate(-50%, -50%);
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s;
+    }
+    .cursor-dot.hovering {
+      width: 16px;
+      height: 16px;
+      background: var(--brand);
+    }
+    .cursor-ring.hovering {
+      width: 60px;
+      height: 60px;
+      border-color: var(--brand);
+    }
+
+    /* Scroll Progress Bar */
+    .scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--brand), var(--accent), var(--brand));
+      background-size: 200% 100%;
+      animation: gradient-shift 3s ease-in-out infinite;
+      z-index: 9999;
+      width: 0%;
+      transition: width 0.05s linear;
+      box-shadow: 0 0 10px var(--brand-glow), 0 0 30px var(--brand-glow);
+    }
+
+    /* ============================================================
+       CSS VARIABLES
+    ============================================================ */
+    :root {
+      --brand: #6d5cff;
+      --brand-light: #8b7dff;
+      --brand-glow: rgba(109, 92, 255, 0.35);
+      --accent: #00d4aa;
+      --accent-glow: rgba(0, 212, 170, 0.25);
+      --surface: rgba(9,9,11,0.55);
+      --surface-2: rgba(14,14,18,0.5);
+      --border: rgba(255, 255, 255, 0.06);
+      --border-hover: rgba(255, 255, 255, 0.12);
+      --text: #fafafa;
+      --text-muted: #a1a1aa;
+      --text-dim: #71717a;
+      --radius: 16px;
+      --container: 1200px;
+    }
+
+    /* ============================================================
+       UTILITY
+    ============================================================ */
+    .container {
+      max-width: var(--container);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); border: 0;
+    }
+
+    /* ============================================================
+       SCROLL-REVEAL ANIMATIONS
+    ============================================================ */
+    .reveal {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                  filter 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      filter: blur(4px);
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0);
+    }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+    .reveal-delay-5 { transition-delay: 0.5s; }
+    .reveal-delay-6 { transition-delay: 0.6s; }
+
+    /* Text split reveal */
+    .split-text .char {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(30px) rotateX(-40deg);
+      transition: opacity 0.5s, transform 0.5s;
+      transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .split-text.revealed .char {
+      opacity: 1;
+      transform: translateY(0) rotateX(0);
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-12px); }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.05); }
+    }
+    @keyframes gradient-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes slide-in-left {
+      from { opacity: 0; transform: translateX(-60px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slide-in-right {
+      from { opacity: 0; transform: translateX(60px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes scale-in {
+      from { opacity: 0; transform: scale(0.85); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes blur-in {
+      from { opacity: 0; filter: blur(12px); }
+      to { opacity: 1; filter: blur(0); }
+    }
+    @keyframes glow-line {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes marquee {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @keyframes ping {
+      75%, 100% { transform: scale(2); opacity: 0; }
+    }
+    @keyframes morph {
+      0%, 100% { border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%; }
+      34% { border-radius: 70% 30% 46% 54% / 30% 29% 71% 70%; }
+      67% { border-radius: 100% 60% 60% 100% / 100% 100% 60% 60%; }
+    }
+    @keyframes text-glow {
+      0%, 100% { text-shadow: 0 0 20px var(--brand-glow), 0 0 40px transparent; }
+      50% { text-shadow: 0 0 30px var(--brand-glow), 0 0 80px var(--brand-glow); }
+    }
+
+    /* ============================================================
+       VIDEO BACKGROUND — Hero section only
+    ============================================================ */
+    .page-video-wrap {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .page-video-wrap video {
+      width: 100%;
+      height: 120%;
+      object-fit: cover;
+      opacity: 0.7;
+      filter: saturate(1.3) brightness(0.75) contrast(1.2) sepia(0.08);
+      will-change: transform;
+      transform: translateY(0) scale(1.05);
+      transition: opacity 2s ease;
+    }
+    .page-video-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        180deg,
+        rgba(9,9,11,0.3) 0%,
+        rgba(9,9,11,0.05) 15%,
+        rgba(9,9,11,0.08) 50%,
+        rgba(9,9,11,0.05) 80%,
+        rgba(9,9,11,0.6) 100%
+      );
+      z-index: 1;
+    }
+    /* Subtle cinematic vignette */
+    .page-video-wrap::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(9,9,11,0.35) 100%);
+      z-index: 2;
+      pointer-events: none;
+    }
+    /* Film grain overlay — hero only */
+    .film-grain {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 256px 256px;
+      mix-blend-mode: overlay;
+    }
+    /* Cinematic anamorphic lens flare accent — hero only */
+    .lens-flare {
+      position: absolute;
+      top: 18%;
+      left: -10%;
+      width: 120%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(109,92,255,0.08), rgba(0,212,170,0.12), rgba(255,180,50,0.06), transparent);
+      z-index: 2;
+      pointer-events: none;
+      filter: blur(6px);
+      animation: flare-drift 8s ease-in-out infinite;
+    }
+
+    /* ============================================================
+       3D ANIMATED BACKGROUND — below hero
+    ============================================================ */
+    #bg3d-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+    @keyframes flare-drift {
+      0%, 100% { transform: translateY(0) scaleX(1); opacity: 0.6; }
+      50% { transform: translateY(40px) scaleX(1.1); opacity: 1; }
+    }
+
+    /* ============================================================
+       PARTICLES CANVAS
+    ============================================================ */
+    #particles-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ============================================================
+       MOUSE GLOW
+    ============================================================ */
+    .mouse-glow {
+      position: fixed;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(109,92,255,0.08) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 1;
+      transform: translate(-50%, -50%);
+      transition: left 0.15s ease-out, top 0.15s ease-out;
+    }
+
+    /* ============================================================
+       GLOWING SECTION DIVIDER
+    ============================================================ */
+    .glow-divider {
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0%, var(--brand) 30%, var(--accent) 50%, var(--brand) 70%, transparent 100%);
+      background-size: 200% 100%;
+      animation: glow-line 4s linear infinite;
+      opacity: 0.5;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ============================================================
+       PROVIDER MARQUEE
+    ============================================================ */
+    .marquee-section {
+      padding: 32px 0;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      background: rgba(9,9,11,0.88);
+      position: relative;
+      z-index: 1;
+    }
+    .marquee-track {
+      display: flex;
+      gap: 64px;
+      animation: marquee 20s linear infinite;
+      width: max-content;
+    }
+    .marquee-item {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-dim);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      opacity: 0.5;
+      transition: opacity 0.3s;
+    }
+    .marquee-item:hover { opacity: 1; }
+    .marquee-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .marquee-letter {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    /* ============================================================
+       TILT CARD EFFECT
+    ============================================================ */
+    .tilt-card {
+      transform-style: preserve-3d;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tilt-card:hover {
+      transform: perspective(800px) rotateY(var(--rx, 0deg)) rotateX(var(--ry, 0deg));
+    }
+
+    /* ============================================================
+       NAVIGATION
+    ============================================================ */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      transition: background 0.3s, backdrop-filter 0.3s, border-color 0.3s;
+      border-bottom: 1px solid transparent;
+    }
+    .nav.scrolled {
+      background: rgba(9, 9, 11, 0.5);
+      backdrop-filter: blur(20px) saturate(1.3);
+      -webkit-backdrop-filter: blur(20px) saturate(1.3);
+      border-bottom-color: var(--border);
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: -0.035em;
+    }
+    .nav-logo-icon {
+      width: 38px;
+      height: 38px;
+      position: relative;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--brand), #4f46e5 40%, var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow:
+        0 0 20px var(--brand-glow),
+        inset 0 1px 0 rgba(255,255,255,0.2);
+      transition: box-shadow 0.3s, transform 0.3s;
+    }
+    .nav-logo:hover .nav-logo-icon {
+      box-shadow:
+        0 0 32px var(--brand-glow),
+        0 0 12px var(--accent-glow),
+        inset 0 1px 0 rgba(255,255,255,0.2);
+      transform: scale(1.05);
+    }
+    .nav-logo-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+    .logo-wordmark {
+      display: flex;
+      align-items: baseline;
+    }
+    .logo-word-cab {
+      color: #fff;
+    }
+    .logo-word-wise {
+      background: linear-gradient(135deg, var(--brand-light), var(--accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color 0.2s;
+      position: relative;
+    }
+    .nav-links a::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 0;
+      width: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--brand), var(--accent));
+      border-radius: 1px;
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--brand);
+      color: #fff;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .nav-cta::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      transform: translateX(-100%);
+      transition: transform 0.5s;
+    }
+    .nav-cta:hover::before { transform: translateX(100%); }
+    .nav-cta:hover {
+      background: var(--brand-light);
+      box-shadow: 0 0 24px var(--brand-glow);
+      transform: translateY(-1px);
+    }
+
+    /* Mobile nav */
+    .nav-toggle { display: none; background: none; padding: 8px; }
+    .nav-toggle span {
+      display: block; width: 20px; height: 2px;
+      background: var(--text); margin: 4px 0; border-radius: 2px;
+      transition: 0.2s;
+    }
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-toggle { display: block; }
+      .nav-links.open {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 100%;
+        left: 0; right: 0;
+        background: rgba(9,9,11,0.95);
+        backdrop-filter: blur(20px);
+        padding: 24px;
+        gap: 20px;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+
+    /* ============================================================
+       HERO
+    ============================================================ */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 120px 0 80px;
+      overflow: hidden;
+      z-index: 1;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      z-index: 1;
+    }
+    .hero-bg-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      animation: pulse-glow 8s ease-in-out infinite;
+    }
+    .hero-bg-orb-1 {
+      width: 600px; height: 600px;
+      background: var(--brand-glow);
+      top: -20%; left: -10%;
+    }
+    .hero-bg-orb-2 {
+      width: 500px; height: 500px;
+      background: var(--accent-glow);
+      bottom: -10%; right: -10%;
+      animation-delay: 3s;
+    }
+    .hero-bg-orb-3 {
+      width: 300px; height: 300px;
+      background: rgba(255, 80, 120, 0.15);
+      top: 30%; right: 20%;
+      animation-delay: 5s;
+    }
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 70%);
+    }
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 80px;
+    }
+    .hero-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(8px);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+      animation: blur-in 0.8s ease-out both;
+    }
+    .hero-badge-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+    .hero-title {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 24px;
+      animation: slide-in-left 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+    }
+    .hero-title:hover {
+      animation: text-glow 2s ease-in-out infinite;
+    }
+    .hero-title-gradient {
+      background: linear-gradient(135deg, var(--brand-light) 0%, var(--accent) 50%, var(--brand) 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: gradient-shift 6s ease-in-out infinite;
+    }
+    .hero-desc {
+      font-size: 18px;
+      line-height: 1.7;
+      color: var(--text-muted);
+      max-width: 520px;
+      margin-bottom: 40px;
+      animation: blur-in 1s ease-out 0.3s both;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      animation: slide-in-left 1s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
+    }
+    .hero-phone {
+      flex-shrink: 0;
+      position: relative;
+      animation: scale-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.6s both;
+    }
+    .phone-mockup {
+      position: relative;
+      width: 320px;
+      animation: float 6s ease-in-out infinite;
+    }
+
+    /* === TITANIUM FRAME — iPhone 15 Pro === */
+    .phone-frame {
+      position: relative;
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(160deg, #2a2a3a 0%, #1a1a26 40%, #111118 100%);
+      border-radius: 52px;
+      border: 1.5px solid rgba(255,255,255,0.08);
+      box-shadow:
+        0 0 0 1.5px rgba(80,80,100,0.25),
+        0 2px 0 0 rgba(255,255,255,0.04),
+        inset 0 1px 0 rgba(255,255,255,0.06),
+        inset 0 -1px 0 rgba(0,0,0,0.3),
+        0 40px 100px -20px rgba(0,0,0,0.7),
+        0 0 180px -40px var(--brand-glow),
+        0 0 100px -30px var(--accent-glow);
+      transition: box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .phone-frame:hover {
+      box-shadow:
+        0 0 0 1.5px rgba(80,80,100,0.3),
+        0 2px 0 0 rgba(255,255,255,0.06),
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        inset 0 -1px 0 rgba(0,0,0,0.3),
+        0 50px 120px -20px rgba(0,0,0,0.8),
+        0 0 220px -30px var(--brand-glow),
+        0 0 140px -20px var(--accent-glow);
+    }
+
+    /* Titanium side buttons */
+    .phone-frame::before {
+      content: '';
+      position: absolute;
+      right: -2.5px;
+      top: 130px;
+      width: 3px;
+      height: 36px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+      border-radius: 0 3px 3px 0;
+    }
+    .phone-frame::after {
+      content: '';
+      position: absolute;
+      left: -2.5px;
+      top: 100px;
+      width: 3px;
+      height: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+      border-radius: 3px 0 0 3px;
+      box-shadow: 0 46px 0 0 rgba(255,255,255,0.08), 0 82px 0 0 rgba(255,255,255,0.08);
+    }
+
+    /* Glass shine reflection */
+    .phone-shine {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      border-radius: 52px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.03) 100%);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Animated gradient border ring */
+    .phone-border-glow {
+      position: absolute;
+      top: -2px; left: -2px; right: -2px; bottom: -2px;
+      border-radius: 54px;
+      background: conic-gradient(from 0deg, var(--brand-light), var(--accent), transparent, transparent, transparent, var(--brand-light));
+      opacity: 0;
+      z-index: -1;
+      animation: phone-ring-rotate 6s linear infinite;
+      transition: opacity 0.4s;
+    }
+    .phone-frame:hover .phone-border-glow { opacity: 0.5; }
+    @keyframes phone-ring-rotate {
+      to { background: conic-gradient(from 360deg, var(--brand-light), var(--accent), transparent, transparent, transparent, var(--brand-light)); }
+    }
+
+    .phone-screen {
+      width: 100%;
+      aspect-ratio: 9/19.5;
+      border-radius: 42px;
+      overflow: hidden;
+      background: #000;
+      position: relative;
+    }
+    .phone-screen-bg {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 120% 60% at 50% 0%, rgba(109,92,255,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 40% at 30% 70%, rgba(0,212,170,0.06) 0%, transparent 50%),
+        linear-gradient(180deg, #0c0c1a 0%, #0a0a16 100%);
+      z-index: 0;
+    }
+    .phone-screen-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* === DYNAMIC ISLAND === */
+    .phone-island {
+      width: 100px;
+      height: 28px;
+      background: #000;
+      border-radius: 20px;
+      margin: 10px auto 0;
+      position: relative;
+      z-index: 5;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .phone-island::before {
+      content: '';
+      position: absolute;
+      right: 22px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #1a1a3a 40%, #0a0a16 60%);
+      box-shadow: inset 0 0 2px rgba(109,92,255,0.3);
+    }
+
+    /* === STATUS BAR === */
+    .phone-status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 24px 0;
+      color: rgba(255,255,255,0.7);
+    }
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+    }
+    .status-bar-pill {
+      background: rgba(255,255,255,0.08);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    /* === APP HEADER === */
+    .phone-app-header {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 2px;
+      padding: 14px 20px 0;
+      letter-spacing: -0.04em;
+    }
+    .phone-app-header .ph-cab { color: #fff; }
+    .phone-app-header .ph-wise {
+      background: linear-gradient(135deg, var(--brand-light), var(--accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .phone-app-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 0 20px;
+      margin-bottom: 14px;
+    }
+
+    /* === SEARCH BAR === */
+    .phone-search-bar {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 11px 14px;
+      font-size: 13px;
+      color: var(--text-dim);
+      margin: 0 16px 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      backdrop-filter: blur(8px);
+    }
+    .search-icon {
+      width: 16px;
+      height: 16px;
+      opacity: 0.5;
+    }
+
+    /* === ROUTE MINI MAP === */
+    .phone-route-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 20px;
+      margin-bottom: 12px;
+    }
+    .route-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .route-dot-from { background: var(--brand-light); box-shadow: 0 0 8px var(--brand-glow); }
+    .route-dot-to { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+    .route-line {
+      width: 2px;
+      height: 18px;
+      background: linear-gradient(180deg, var(--brand-light), var(--accent));
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .route-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .route-text {
+      font-size: 11px;
+      color: rgba(255,255,255,0.85);
+      font-weight: 600;
+    }
+    .route-subtext {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+    .route-info {
+      flex: 1;
+    }
+
+    /* === SECTION LABEL inside phone === */
+    .phone-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      padding: 0 20px;
+      margin-bottom: 8px;
+    }
+
+    /* === RIDE CARDS — Glassmorphic === */
+    .phone-ride-card {
+      background: rgba(255,255,255,0.035);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 14px 14px 12px;
+      margin: 0 16px 8px;
+      backdrop-filter: blur(12px);
+      animation: fade-in-up 0.5s ease-out both;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, background 0.3s;
+    }
+    .phone-ride-card.card-best {
+      border-color: rgba(0,212,170,0.2);
+      background: rgba(0,212,170,0.04);
+    }
+    .phone-ride-card.card-best::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, var(--accent), transparent);
+      border-radius: 3px 0 0 3px;
+    }
+    .phone-ride-card:nth-child(1) { animation-delay: 1.2s; }
+    .phone-ride-card:nth-child(2) { animation-delay: 1.5s; }
+    .phone-ride-card:nth-child(3) { animation-delay: 1.8s; }
+    .phone-ride-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .phone-ride-provider {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .phone-ride-provider img {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      object-fit: contain;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .phone-ride-provider-name {
+      display: flex;
+      flex-direction: column;
+    }
+    .phone-ride-provider-name span:first-child {
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.2;
+    }
+    .phone-ride-provider-name span:last-child {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .phone-ride-price-block {
+      text-align: right;
+    }
+    .phone-ride-price {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .phone-ride-eta {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .phone-ride-meta {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .phone-ride-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 8px;
+      border-radius: 8px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .tag-best {
+      background: rgba(0, 212, 170, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(0, 212, 170, 0.15);
+    }
+    .tag-fast {
+      background: rgba(109, 92, 255, 0.12);
+      color: var(--brand-light);
+      border: 1px solid rgba(109, 92, 255, 0.15);
+    }
+    .tag-surge {
+      background: rgba(255, 95, 0, 0.12);
+      color: #FF8C42;
+      border: 1px solid rgba(255, 95, 0, 0.15);
+    }
+    .phone-ride-detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+    .phone-ride-detail {
+      font-size: 10px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .phone-ride-detail .dot {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--text-dim);
+    }
+
+    /* === BOTTOM NAV BAR === */
+    .phone-bottom-nav {
+      margin-top: auto;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 10px 16px 8px;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+    .phone-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      font-size: 9px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+    .phone-nav-item.active {
+      color: var(--brand-light);
+    }
+    .phone-nav-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+    .phone-home-indicator {
+      width: 120px;
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 3px;
+      margin: 4px auto 2px;
+    }
+
+    .phone-glow {
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      top: -50%;
+      left: -50%;
+      background: radial-gradient(circle, var(--brand-glow) 0%, transparent 50%);
+      opacity: 0.3;
+      z-index: -1;
+      animation: pulse-glow 6s ease-in-out infinite;
+    }
+
+    @media (max-width: 960px) {
+      .hero-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 48px;
+      }
+      .hero-desc { margin-left: auto; margin-right: auto; }
+      .hero-actions { justify-content: center; }
+      .phone-mockup { width: 280px; }
+    }
+
+    /* ============================================================
+       BUTTONS
+    ============================================================ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand), #5a47e6);
+      color: #fff;
+      box-shadow: 0 0 24px var(--brand-glow), 0 1px 2px rgba(0,0,0,0.3);
+    }
+    .btn-primary:hover {
+      transform: translateY(-3px) scale(1.03);
+      box-shadow: 0 0 50px var(--brand-glow), 0 12px 40px rgba(109,92,255,0.3);
+    }
+    .btn-primary::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      animation: shimmer 3s ease-in-out infinite;
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+    }
+
+    /* Store Buttons */
+    .store-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 28px;
+      border-radius: 14px;
+      background: #fff;
+      color: #000;
+      font-size: 15px;
+      font-weight: 600;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      position: relative;
+      overflow: hidden;
+    }
+    .store-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+      transform: translateX(-100%);
+      transition: transform 0.6s;
+    }
+    .store-btn:hover::before {
+      transform: translateX(100%);
+    }
+    .store-btn:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+    }
+    .store-btn svg { width: 28px; height: 28px; }
+    .store-btn-text {
+      text-align: left;
+      line-height: 1.2;
+    }
+    .store-btn-text small {
+      display: block;
+      font-size: 10px;
+      font-weight: 500;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .store-btn-text span {
+      display: block;
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .store-btn-dark {
+      background: #18181b;
+      color: #fff;
+      border: 1px solid var(--border);
+    }
+    .store-btn-dark:hover {
+      border-color: var(--border-hover);
+    }
+    .store-btn-dark .store-btn-text small { color: var(--text-dim); }
+
+    /* ============================================================
+       STATS BAR
+    ============================================================ */
+    .stats {
+      padding: 64px 0;
+      border-top: none;
+      border-bottom: 1px solid var(--border);
+      background: rgba(9,9,11,0.88);
+      position: relative;
+      z-index: 1;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 32px;
+      text-align: center;
+    }
+    .stat-number {
+      font-size: clamp(32px, 4vw, 48px);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--text), var(--brand-light));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      transition: transform 0.3s, filter 0.3s;
+    }
+    .stat-number:hover {
+      transform: scale(1.15);
+      filter: drop-shadow(0 0 12px var(--brand-glow));
+    }
+    .stat-label {
+      font-size: 14px;
+      color: var(--text-dim);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+    @media (max-width: 640px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ============================================================
+       FEATURES
+    ============================================================ */
+    .features {
+      padding: 120px 0;
+      position: relative;
+      z-index: 1;
+      background: rgba(9,9,11,0.86);
+    }
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--brand-light);
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: clamp(32px, 4vw, 52px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, var(--text) 0%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .section-desc {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 600px;
+      line-height: 1.7;
+    }
+    .features-header {
+      text-align: center;
+      margin-bottom: 80px;
+    }
+    .features-header .section-desc {
+      margin: 0 auto;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .feature-card {
+      position: relative;
+      padding: 32px;
+      border-radius: var(--radius);
+      background: rgba(17,17,19,0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow: hidden;
+      transform-style: preserve-3d;
+    }
+    /* Spotlight hover glow that follows mouse */
+    .feature-card .card-spotlight {
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(109,92,255,0.12) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s;
+      transform: translate(-50%, -50%);
+    }
+    .feature-card:hover .card-spotlight { opacity: 1; }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(109,92,255,0.2), transparent, rgba(0,212,170,0.2));
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+      -webkit-mask-composite: xor;
+      opacity: 0;
+      transition: opacity 0.35s;
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      border-color: var(--border-hover);
+      box-shadow: 0 24px 80px -12px rgba(0,0,0,0.5), 0 0 40px -8px var(--brand-glow);
+    }
+    .feature-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      margin-bottom: 20px;
+      background: rgba(109, 92, 255, 0.1);
+      border: 1px solid rgba(109, 92, 255, 0.15);
+      transition: transform 0.4s, box-shadow 0.4s;
+    }
+    .feature-card:hover .feature-icon {
+      transform: scale(1.15) rotate(-5deg);
+      box-shadow: 0 0 24px var(--brand-glow);
+    }
+    .feature-card:nth-child(2) .feature-icon {
+      background: rgba(0, 212, 170, 0.1);
+      border-color: rgba(0, 212, 170, 0.15);
+    }
+    .feature-card:nth-child(3) .feature-icon {
+      background: rgba(255, 160, 60, 0.1);
+      border-color: rgba(255, 160, 60, 0.15);
+    }
+    .feature-card:nth-child(4) .feature-icon {
+      background: rgba(255, 80, 120, 0.1);
+      border-color: rgba(255, 80, 120, 0.15);
+    }
+    .feature-card:nth-child(5) .feature-icon {
+      background: rgba(60, 180, 255, 0.1);
+      border-color: rgba(60, 180, 255, 0.15);
+    }
+    .feature-card:nth-child(6) .feature-icon {
+      background: rgba(180, 120, 255, 0.1);
+      border-color: rgba(180, 120, 255, 0.15);
+    }
+    .feature-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    @media (max-width: 960px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .features-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ============================================================
+       HOW IT WORKS
+    ============================================================ */
+    .how-it-works {
+      padding: 120px 0;
+      background: rgba(6,6,10,0.86);
+      position: relative;
+      overflow: hidden;
+      z-index: 1;
+    }
+    .how-it-works::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%;
+      width: 600px; height: 600px;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, var(--brand-glow) 0%, transparent 60%);
+      filter: blur(100px);
+      opacity: 0.3;
+    }
+    .how-header {
+      text-align: center;
+      margin-bottom: 80px;
+      position: relative;
+      z-index: 1;
+    }
+    .how-header .section-desc { margin: 0 auto; }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      position: relative;
+      z-index: 1;
+    }
+    .steps::before {
+      content: '';
+      position: absolute;
+      top: 40px;
+      left: calc(16.67%);
+      right: calc(16.67%);
+      height: 2px;
+      background: linear-gradient(90deg, var(--brand-glow), var(--accent-glow), var(--brand-glow));
+    }
+    .step {
+      text-align: center;
+      position: relative;
+    }
+    .step-number {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 28px;
+      font-weight: 900;
+      background: var(--surface-2);
+      border: 2px solid var(--border);
+      position: relative;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .step-number::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      border: 2px solid var(--brand);
+      opacity: 0;
+      animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    .step:hover .step-number {
+      border-color: var(--brand);
+      box-shadow: 0 0 40px var(--brand-glow);
+      transform: scale(1.1);
+    }
+    .step:hover .step-number::after {
+      opacity: 0.4;
+    }
+    .step-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .step-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      max-width: 280px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    @media (max-width: 768px) {
+      .steps { grid-template-columns: 1fr; gap: 48px; }
+      .steps::before { display: none; }
+    }
+
+    /* ============================================================
+       COMPARISON SHOWCASE
+    ============================================================ */
+    .showcase {
+      padding: 120px 0;
+      position: relative;
+      z-index: 1;
+      background: rgba(9,9,11,0.86);
+    }
+    .showcase-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .showcase-visual {
+      position: relative;
+    }
+    .comparison-card {
+      background: rgba(17,17,19,0.9);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 25px 80px -12px rgba(0,0,0,0.6), 0 0 60px -20px var(--brand-glow);
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s;
+    }
+    .comparison-card:hover {
+      transform: translateY(-6px) scale(1.01);
+      box-shadow: 0 35px 100px -12px rgba(0,0,0,0.7), 0 0 80px -10px var(--brand-glow);
+    }
+    .comparison-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .comparison-header h4 {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .comparison-route {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    .comparison-rows { padding: 8px; }
+    .comparison-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      border-radius: 12px;
+      transition: background 0.2s;
+    }
+    .comparison-row:hover { background: rgba(255,255,255,0.02); }
+    .comparison-row-best {
+      background: rgba(0, 212, 170, 0.04);
+      border: 1px solid rgba(0, 212, 170, 0.1);
+    }
+    .comparison-provider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .provider-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+      overflow: hidden;
+    }
+    .provider-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .provider-uber { background: #000; color: #fff; border: 1px solid rgba(255,255,255,0.1); }
+    .provider-bolt { background: #34D186; color: #000; }
+    .provider-freenow { background: #E31E5C; color: #fff; }
+    .provider-wheely { background: #1a1a2e; color: #C4A265; border: 1px solid #C4A265; }
+    .comparison-info { text-align: right; }
+    .comparison-price {
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .comparison-eta {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    .comparison-savings {
+      text-align: center;
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .showcase-text {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    .showcase-point {
+      display: flex;
+      gap: 16px;
+    }
+    .showcase-point-icon {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: rgba(109, 92, 255, 0.1);
+      border: 1px solid rgba(109, 92, 255, 0.15);
+    }
+    .showcase-point h4 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .showcase-point p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    @media (max-width: 960px) {
+      .showcase-layout {
+        grid-template-columns: 1fr;
+        gap: 48px;
+      }
+    }
+
+    /* ============================================================
+       CTA - DOWNLOAD
+    ============================================================ */
+    .download {
+      padding: 120px 0;
+      position: relative;
+      overflow: hidden;
+      z-index: 1;
+      background: rgba(9,9,11,0.86);
+    }
+    .download-card {
+      position: relative;
+      padding: 80px 60px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #111128, #0e1a28, #111128);
+      border: 1px solid var(--border);
+      text-align: center;
+      overflow: hidden;
+      transition: transform 0.5s, box-shadow 0.5s;
+    }
+    .download-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 30px 80px -20px var(--brand-glow);
+    }
+    .download-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 24px;
+      padding: 1px;
+      background: linear-gradient(135deg, var(--brand-glow), transparent 40%, transparent 60%, var(--accent-glow));
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+      -webkit-mask-composite: xor;
+    }
+    .download-card::after {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      top: -250px; left: 50%;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, var(--brand-glow), transparent 60%);
+      filter: blur(80px);
+    }
+    .download-content {
+      position: relative;
+      z-index: 1;
+    }
+    .download-content .section-title {
+      margin-bottom: 16px;
+    }
+    .download-content .section-desc {
+      margin: 0 auto 40px;
+      text-align: center;
+    }
+    .download-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    @media (max-width: 640px) {
+      .download-card { padding: 48px 24px; }
+    }
+
+    /* ============================================================
+       TESTIMONIALS
+    ============================================================ */
+    .testimonials {
+      padding: 120px 0;
+      background: rgba(6,6,10,0.86);
+      z-index: 1;
+      position: relative;
+    }
+    .testimonials-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+    .testimonials-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .testimonial-card {
+      padding: 32px;
+      border-radius: var(--radius);
+      background: rgba(24,24,27,0.8);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .testimonial-card .card-spotlight {
+      position: absolute;
+      width: 250px;
+      height: 250px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,212,170,0.1) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s;
+      transform: translate(-50%, -50%);
+    }
+    .testimonial-card:hover .card-spotlight { opacity: 1; }
+    .testimonial-card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-6px) scale(1.02);
+      box-shadow: 0 20px 60px -12px rgba(0,0,0,0.4);
+    }
+    .testimonial-stars {
+      margin-bottom: 16px;
+      color: #fbbf24;
+      font-size: 16px;
+      letter-spacing: 2px;
+    }
+    .testimonial-text {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+    .testimonial-author {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .testimonial-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .testimonial-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .testimonial-role {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    @media (max-width: 960px) {
+      .testimonials-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ============================================================
+       FOOTER
+    ============================================================ */
+    .footer {
+      padding: 64px 0 32px;
+      border-top: 1px solid var(--border);
+      background: rgba(6,6,10,0.9);
+      position: relative;
+      z-index: 1;
+    }
+    .footer-top {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 48px;
+    }
+    .footer-brand p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 16px;
+      max-width: 300px;
+      line-height: 1.6;
+    }
+    .footer-col h5 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+    .footer-col a {
+      display: block;
+      font-size: 14px;
+      color: var(--text-muted);
+      padding: 4px 0;
+      transition: color 0.2s;
+    }
+    .footer-col a:hover { color: var(--text); }
+    .footer-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .footer-social {
+      display: flex;
+      gap: 16px;
+    }
+    .footer-social a {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      font-size: 16px;
+    }
+    .footer-social a:hover {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+      transform: translateY(-3px) scale(1.1);
+      box-shadow: 0 8px 24px var(--brand-glow);
+    }
+    @media (max-width: 768px) {
+      .footer-top {
+        grid-template-columns: 1fr 1fr;
+        gap: 32px;
+      }
+      .footer-brand { grid-column: 1 / -1; }
+      .footer-bottom { flex-direction: column; gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Scroll Progress Bar -->
+  <div class="scroll-progress" id="scrollProgress"></div>
+
+  <!-- Custom Cursor -->
+  <div class="cursor-dot" id="cursorDot"></div>
+  <div class="cursor-ring" id="cursorRing"></div>
+
+  <!-- 3D Animated Background Canvas (visible below hero) -->
+  <canvas id="bg3d-canvas"></canvas>
+
+  <!-- Floating mouse glow -->
+  <div class="mouse-glow" id="mouseGlow"></div>
+
+  <!-- Particles -->
+  <canvas id="particles-canvas"></canvas>
+
+  <!-- ========== NAVIGATION ========== -->
+  <nav class="nav" id="nav">
+    <div class="container nav-inner">
+      <a href="#" class="nav-logo">
+        <div class="nav-logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L4 7v10l8 5 8-5V7l-8-5z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" fill="none" opacity="0.3"/>
+            <path d="M7 14l3-4 2 3 3-5 3 6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="7" cy="14" r="1.5" fill="#fff"/>
+            <circle cx="18" cy="14" r="1.5" fill="#00d4aa"/>
+          </svg>
+        </div>
+        <span class="logo-wordmark"><span class="logo-word-cab">Cab</span><span class="logo-word-wise">Wise</span></span>
+      </a>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#compare">Compare</a></li>
+        <li><a href="#reviews">Reviews</a></li>
+        <li><a href="#download" class="nav-cta">Download</a></li>
+      </ul>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========== HERO ========== -->
+  <section class="hero" id="hero">
+    <!-- Cinematic Video Background (hero only) -->
+    <div class="page-video-wrap" id="pageVideo">
+      <video autoplay muted loop playsinline preload="auto">
+        <source src="https://videos.pexels.com/video-files/5834616/5834616-uhd_2560_1440_24fps.mp4" type="video/mp4" />
+      </video>
+      <div class="page-video-overlay"></div>
+    </div>
+    <div class="film-grain"></div>
+    <div class="lens-flare"></div>
+    <div class="hero-bg">
+      <div class="hero-bg-orb hero-bg-orb-1"></div>
+      <div class="hero-bg-orb hero-bg-orb-2"></div>
+      <div class="hero-bg-orb hero-bg-orb-3"></div>
+      <div class="hero-grid"></div>
+    </div>
+    <div class="container hero-content">
+      <div class="hero-text">
+        <div class="hero-badge">
+          <div class="hero-badge-dot"></div>
+          Now comparing 4+ ride providers
+        </div>
+        <h1 class="hero-title">
+          Stop overpaying<br/>for your <span class="hero-title-gradient">rides.</span>
+        </h1>
+        <p class="hero-desc">
+          CabWise instantly compares fares across Uber, Bolt, FreeNow & more — so you always get the cheapest or fastest ride, every single time.
+        </p>
+        <div class="hero-actions">
+          <a href="#download" class="store-btn" aria-label="Download on the App Store">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            <div class="store-btn-text">
+              <small>Download on the</small>
+              <span>App Store</span>
+            </div>
+          </a>
+          <a href="#download" class="store-btn store-btn-dark" aria-label="Get it on Google Play">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 2.302-2.302 2.302L15.396 12l2.302-2.492zM5.864 2.658L16.8 8.99l-2.302 2.302-8.634-8.634z" fill="#fff"/></svg>
+            <div class="store-btn-text">
+              <small>Get it on</small>
+              <span>Google Play</span>
+            </div>
+          </a>
+        </div>
+      </div>
+      <div class="hero-phone">
+        <div class="phone-mockup">
+          <div class="phone-glow"></div>
+          <div class="phone-frame">
+            <div class="phone-border-glow"></div>
+            <div class="phone-shine"></div>
+            <div class="phone-screen">
+              <div class="phone-screen-bg"></div>
+              <div class="phone-screen-content">
+                <!-- Dynamic Island -->
+                <div class="phone-island"></div>
+
+                <!-- Status Bar -->
+                <div class="phone-status-bar">
+                  <span style="font-weight:700;">9:41</span>
+                  <div class="status-icons">
+                    <span>●●●●</span>
+                    <span style="font-size:12px;">▲</span>
+                    <svg width="16" height="11" viewBox="0 0 16 11" fill="none" style="opacity:0.7"><rect x="0" y="3" width="3" height="8" rx="1" fill="white" opacity="0.3"/><rect x="4.5" y="2" width="3" height="9" rx="1" fill="white" opacity="0.5"/><rect x="9" y="0.5" width="3" height="10.5" rx="1" fill="white" opacity="0.8"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="white"/></svg>
+                    <svg width="22" height="11" viewBox="0 0 22 11" fill="none" style="opacity:0.7"><rect x="0.5" y="0.5" width="19" height="10" rx="2" stroke="white" stroke-opacity="0.3"/><rect x="1.5" y="1.5" width="14" height="8" rx="1" fill="white"/><rect x="20.5" y="3.5" width="1.5" height="4" rx="0.75" fill="white" opacity="0.3"/></svg>
+                  </div>
+                </div>
+
+                <!-- App Header -->
+                <div class="phone-app-header">
+                  <span class="ph-cab">Cab</span><span class="ph-wise">Wise</span>
+                </div>
+                <div class="phone-app-sub">Compare rides instantly</div>
+
+                <!-- Search Bar -->
+                <div class="phone-search-bar">
+                  <svg class="search-icon" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.5" stroke="white" stroke-opacity="0.4" stroke-width="1.5"/><line x1="11" y1="11" x2="14.5" y2="14.5" stroke="white" stroke-opacity="0.4" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  <span style="opacity: 0.4">Where to?</span>
+                </div>
+
+                <!-- Active Route -->
+                <div class="phone-route-bar">
+                  <div class="route-col">
+                    <div class="route-dot route-dot-from"></div>
+                    <div class="route-line"></div>
+                    <div class="route-dot route-dot-to"></div>
+                  </div>
+                  <div class="route-info">
+                    <div class="route-text">King's Cross Station</div>
+                    <div class="route-subtext" style="margin-bottom:6px">N1C 4TB</div>
+                    <div class="route-text">Canary Wharf</div>
+                    <div class="route-subtext">E14 5AB</div>
+                  </div>
+                </div>
+
+                <!-- Section Label -->
+                <div class="phone-section-label">3 rides found · sorted by price</div>
+
+                <!-- Ride Card 1 — Best Price -->
+                <div class="phone-ride-card card-best">
+                  <div class="phone-ride-top">
+                    <div class="phone-ride-provider">
+                      <img src="../assets/providers/bolt.png" alt="Bolt">
+                      <div class="phone-ride-provider-name">
+                        <span>Bolt</span>
+                        <span>Standard</span>
+                      </div>
+                    </div>
+                    <div class="phone-ride-price-block">
+                      <div class="phone-ride-price" style="color: var(--accent)">£8.50</div>
+                      <div class="phone-ride-eta">3 min away</div>
+                    </div>
+                  </div>
+                  <div class="phone-ride-meta">
+                    <span class="phone-ride-tag tag-best">★ Best price</span>
+                  </div>
+                  <div class="phone-ride-detail-row">
+                    <div class="phone-ride-detail">
+                      <span>🕐 18 min</span>
+                      <span class="dot"></span>
+                      <span>4.2 mi</span>
+                    </div>
+                    <div class="phone-ride-detail" style="color: var(--accent); font-weight: 600;">Save £1.70</div>
+                  </div>
+                </div>
+
+                <!-- Ride Card 2 — Fastest -->
+                <div class="phone-ride-card">
+                  <div class="phone-ride-top">
+                    <div class="phone-ride-provider">
+                      <img src="../assets/providers/uber.png" alt="Uber">
+                      <div class="phone-ride-provider-name">
+                        <span>Uber</span>
+                        <span>UberX</span>
+                      </div>
+                    </div>
+                    <div class="phone-ride-price-block">
+                      <div class="phone-ride-price">£9.20</div>
+                      <div class="phone-ride-eta">2 min away</div>
+                    </div>
+                  </div>
+                  <div class="phone-ride-meta">
+                    <span class="phone-ride-tag tag-fast">⚡ Fastest</span>
+                  </div>
+                  <div class="phone-ride-detail-row">
+                    <div class="phone-ride-detail">
+                      <span>🕐 16 min</span>
+                      <span class="dot"></span>
+                      <span>4.2 mi</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Ride Card 3 -->
+                <div class="phone-ride-card">
+                  <div class="phone-ride-top">
+                    <div class="phone-ride-provider">
+                      <img src="../assets/providers/freenow.png" alt="FreeNow">
+                      <div class="phone-ride-provider-name">
+                        <span>FreeNow</span>
+                        <span>Economy</span>
+                      </div>
+                    </div>
+                    <div class="phone-ride-price-block">
+                      <div class="phone-ride-price">£10.40</div>
+                      <div class="phone-ride-eta">5 min away</div>
+                    </div>
+                  </div>
+                  <div class="phone-ride-meta">
+                    <span class="phone-ride-tag tag-surge">↑ 1.2x surge</span>
+                  </div>
+                  <div class="phone-ride-detail-row">
+                    <div class="phone-ride-detail">
+                      <span>🕐 22 min</span>
+                      <span class="dot"></span>
+                      <span>4.2 mi</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Bottom Nav -->
+                <div class="phone-bottom-nav">
+                  <div class="phone-nav-item active">
+                    <span class="phone-nav-icon">🏠</span>
+                    <span>Home</span>
+                  </div>
+                  <div class="phone-nav-item">
+                    <span class="phone-nav-icon">🕐</span>
+                    <span>History</span>
+                  </div>
+                  <div class="phone-nav-item">
+                    <span class="phone-nav-icon">⭐</span>
+                    <span>Saved</span>
+                  </div>
+                  <div class="phone-nav-item">
+                    <span class="phone-nav-icon">👤</span>
+                    <span>Account</span>
+                  </div>
+                </div>
+                <div class="phone-home-indicator"></div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== PROVIDER MARQUEE ========== -->
+  <div class="marquee-section">
+    <div class="marquee-track">
+      <span class="marquee-item"><img class="marquee-logo" src="../assets/providers/bolt.png" alt="Bolt"> Bolt</span>
+      <span class="marquee-item"><img class="marquee-logo" src="../assets/providers/freenow.png" alt="FreeNow"> FreeNow</span>
+      <span class="marquee-item"><img class="marquee-logo" src="../assets/providers/uber.png" alt="Uber"> Uber</span>
+      <!-- Duplicate for seamless loop -->
+      <span class="marquee-item"><img class="marquee-logo" src="../assets/providers/bolt.png" alt="Bolt"> Bolt</span>
+      <span class="marquee-item"><img class="marquee-logo" src="../assets/providers/freenow.png" alt="FreeNow"> FreeNow</span>
+      <span class="marquee-item"><img class="marquee-logo" src="../assets/providers/uber.png" alt="Uber"> Uber</span>
+    </div>
+  </div>
+
+  <!-- Glowing divider -->
+  <div class="glow-divider"></div>
+
+  <!-- ========== STATS ========== -->
+  <section class="stats">
+    <div class="container">
+      <div class="stats-grid">
+        <div class="reveal">
+          <div class="stat-number" data-count="4">4+</div>
+          <div class="stat-label">Ride Providers</div>
+        </div>
+        <div class="reveal reveal-delay-1">
+          <div class="stat-number">23%</div>
+          <div class="stat-label">Average Savings</div>
+        </div>
+        <div class="reveal reveal-delay-2">
+          <div class="stat-number">&lt;3s</div>
+          <div class="stat-label">Comparison Speed</div>
+        </div>
+        <div class="reveal reveal-delay-3">
+          <div class="stat-number">100%</div>
+          <div class="stat-label">Free to Use</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="glow-divider"></div>
+
+  <!-- ========== FEATURES ========== -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="features-header reveal">
+        <div class="section-label">✦ Features</div>
+        <h2 class="section-title">Everything you need to<br/>ride smarter</h2>
+        <p class="section-desc">One app to compare them all. No more switching between apps to find the best deal.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card reveal">
+          <div class="feature-icon">⚡</div>
+          <h3 class="feature-title">Real-Time Comparison</h3>
+          <p class="feature-desc">See live prices from Uber, Bolt, FreeNow, and Wheely side-by-side — updated every second.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <div class="feature-icon">📍</div>
+          <h3 class="feature-title">Smart Pickup Points</h3>
+          <p class="feature-desc">AI-powered suggestions for the nearest, safest pickup points to reduce wait times.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <div class="feature-icon">🔔</div>
+          <h3 class="feature-title">Price Alerts</h3>
+          <p class="feature-desc">Set a target price and get notified instantly when surge pricing drops to your budget.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-3">
+          <div class="feature-icon">📊</div>
+          <h3 class="feature-title">Surge Prediction</h3>
+          <p class="feature-desc">ML-powered surge forecasting helps you plan ahead and avoid peak pricing windows.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-4">
+          <div class="feature-icon">🕐</div>
+          <h3 class="feature-title">Schedule Rides</h3>
+          <p class="feature-desc">Plan rides in advance and compare prices for future trips. Perfect for airport runs.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">🔗</div>
+          <h3 class="feature-title">One-Tap Booking</h3>
+          <p class="feature-desc">Found your best deal? Deep-link directly to the provider app and book in one tap.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="glow-divider"></div>
+
+  <!-- ========== HOW IT WORKS ========== -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <div class="how-header reveal">
+        <div class="section-label">✦ How It Works</div>
+        <h2 class="section-title">Three steps to the<br/>best ride</h2>
+        <p class="section-desc">No sign-up required. Just open the app, compare, and ride.</p>
+      </div>
+      <div class="steps">
+        <div class="step reveal">
+          <div class="step-number">1</div>
+          <h3 class="step-title">Enter Destination</h3>
+          <p class="step-desc">Type where you're heading. We detect your location and find nearby pickup points automatically.</p>
+        </div>
+        <div class="step reveal reveal-delay-1">
+          <div class="step-number">2</div>
+          <h3 class="step-title">Compare Fares</h3>
+          <p class="step-desc">See real-time prices, ETAs, and surge status from every provider — ranked by price or speed.</p>
+        </div>
+        <div class="step reveal reveal-delay-2">
+          <div class="step-number">3</div>
+          <h3 class="step-title">Book & Ride</h3>
+          <p class="step-desc">Tap your chosen ride and we'll deep-link you straight to the provider's app. Done in seconds.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="glow-divider"></div>
+
+  <!-- ========== COMPARISON SHOWCASE ========== -->
+  <section class="showcase" id="compare">
+    <div class="container">
+      <div class="showcase-layout">
+        <div class="showcase-visual reveal">
+          <div class="comparison-card">
+            <div class="comparison-header">
+              <h4>Live Fare Comparison</h4>
+              <span class="comparison-route">King's Cross → Canary Wharf</span>
+            </div>
+            <div class="comparison-rows">
+              <div class="comparison-row comparison-row-best">
+                <div class="comparison-provider">
+                  <div class="provider-logo provider-bolt"><img src="../assets/providers/bolt.png" alt="Bolt"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 14px;">Bolt</div>
+                    <div style="font-size: 11px; color: var(--accent);">✓ Best price</div>
+                  </div>
+                </div>
+                <div class="comparison-info">
+                  <div class="comparison-price" style="color: var(--accent);">£12.50</div>
+                  <div class="comparison-eta">ETA 3 min</div>
+                </div>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-provider">
+                  <div class="provider-logo provider-uber"><img src="../assets/providers/uber.png" alt="Uber"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 14px;">Uber</div>
+                    <div style="font-size: 11px; color: var(--brand-light);">⚡ Fastest</div>
+                  </div>
+                </div>
+                <div class="comparison-info">
+                  <div class="comparison-price">£14.20</div>
+                  <div class="comparison-eta">ETA 2 min</div>
+                </div>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-provider">
+                  <div class="provider-logo provider-freenow"><img src="../assets/providers/freenow.png" alt="FreeNow"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 14px;">FreeNow</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Standard</div>
+                  </div>
+                </div>
+                <div class="comparison-info">
+                  <div class="comparison-price">£15.80</div>
+                  <div class="comparison-eta">ETA 4 min</div>
+                </div>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-provider">
+                  <div class="provider-logo provider-wheely"><img src="../assets/providers/wheely.png" alt="Wheely"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 14px;">Wheely</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Premium</div>
+                  </div>
+                </div>
+                <div class="comparison-info">
+                  <div class="comparison-price">£28.00</div>
+                  <div class="comparison-eta">ETA 6 min</div>
+                </div>
+              </div>
+            </div>
+            <div class="comparison-savings">
+              💰 You save £3.30 by choosing Bolt over Uber
+            </div>
+          </div>
+        </div>
+        <div class="showcase-text">
+          <div class="reveal">
+            <div class="section-label">✦ Smart Comparison</div>
+            <h2 class="section-title">See every option.<br/>Choose the best.</h2>
+            <p class="section-desc" style="margin-bottom: 40px;">No more guessing. CabWise shows you the real picture — every provider, every price, every second.</p>
+          </div>
+          <div class="showcase-point reveal reveal-delay-1">
+            <div class="showcase-point-icon">💷</div>
+            <div>
+              <h4>Transparent Pricing</h4>
+              <p>See exact fare breakdowns including surge multipliers, so you know exactly what you're paying.</p>
+            </div>
+          </div>
+          <div class="showcase-point reveal reveal-delay-2">
+            <div class="showcase-point-icon">📈</div>
+            <div>
+              <h4>Surge Intelligence</h4>
+              <p>Real-time surge indicators and predictions help you decide whether to book now or wait 10 minutes.</p>
+            </div>
+          </div>
+          <div class="showcase-point reveal reveal-delay-3">
+            <div class="showcase-point-icon">🎯</div>
+            <div>
+              <h4>Personalised Ranking</h4>
+              <p>Filter by price, ETA, vehicle type, or your favorite providers. Your preferences, your choice.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="glow-divider"></div>
+
+  <!-- ========== TESTIMONIALS ========== -->
+  <section class="testimonials" id="reviews">
+    <div class="container">
+      <div class="testimonials-header reveal">
+        <div class="section-label">✦ Reviews</div>
+        <h2 class="section-title">Loved by riders</h2>
+        <p class="section-desc" style="margin: 16px auto 0;">Thousands of smart commuters save money every day with CabWise.</p>
+      </div>
+      <div class="testimonials-grid">
+        <div class="testimonial-card reveal">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"Saved me £6 on my airport run last week. I had no idea Bolt was that much cheaper at 5am. This app pays for itself — well, it's free!"</p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">J</div>
+            <div>
+              <div class="testimonial-name">James K.</div>
+              <div class="testimonial-role">Daily commuter, London</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card reveal reveal-delay-1">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"The surge prediction feature is a game-changer. I just wait 10 minutes when it tells me to and save 30%. Absolute must-have app."</p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">S</div>
+            <div>
+              <div class="testimonial-name">Sarah M.</div>
+              <div class="testimonial-role">Marketing Manager</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card reveal reveal-delay-2">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"I used to open 3 apps every time I needed a ride. Now I just open CabWise. Clean design, fast results. Brilliant."</p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">R</div>
+            <div>
+              <div class="testimonial-name">Raj P.</div>
+              <div class="testimonial-role">Software Engineer</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="glow-divider"></div>
+
+  <!-- ========== DOWNLOAD CTA ========== -->
+  <section class="download" id="download">
+    <div class="container">
+      <div class="download-card reveal">
+        <div class="download-content">
+          <div class="section-label">✦ Download Now</div>
+          <h2 class="section-title">Ready to ride smarter?</h2>
+          <p class="section-desc">Join thousands of riders already saving money on every trip. Free on iOS and Android.</p>
+          <div class="download-buttons">
+            <a href="#" class="store-btn" aria-label="Download on the App Store">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+              <div class="store-btn-text">
+                <small>Download on the</small>
+                <span>App Store</span>
+              </div>
+            </a>
+            <a href="#" class="store-btn store-btn-dark" aria-label="Get it on Google Play">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 2.302-2.302 2.302L15.396 12l2.302-2.492zM5.864 2.658L16.8 8.99l-2.302 2.302-8.634-8.634z" fill="#fff"/></svg>
+              <div class="store-btn-text">
+                <small>Get it on</small>
+                <span>Google Play</span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <a href="#" class="nav-logo">
+            <div class="nav-logo-icon">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L4 7v10l8 5 8-5V7l-8-5z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" fill="none" opacity="0.3"/>
+                <path d="M7 14l3-4 2 3 3-5 3 6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="7" cy="14" r="1.5" fill="#fff"/>
+                <circle cx="18" cy="14" r="1.5" fill="#00d4aa"/>
+              </svg>
+            </div>
+            <span class="logo-wordmark"><span class="logo-word-cab">Cab</span><span class="logo-word-wise">Wise</span></span>
+          </a>
+          <p>The smartest way to compare ride-hailing fares. One app, every provider, the best price — always.</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#compare">Comparison</a>
+          <a href="#download">Download</a>
+        </div>
+        <div class="footer-col">
+          <h5>Company</h5>
+          <a href="#">About</a>
+          <a href="#">Careers</a>
+          <a href="#">Blog</a>
+          <a href="#">Press</a>
+        </div>
+        <div class="footer-col">
+          <h5>Legal</h5>
+          <a href="#">Privacy Policy</a>
+          <a href="#">Terms of Service</a>
+          <a href="#">Cookie Policy</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2025 CabWise. All rights reserved.</span>
+        <div class="footer-social">
+          <a href="#" aria-label="Twitter">𝕏</a>
+          <a href="#" aria-label="LinkedIn">in</a>
+          <a href="#" aria-label="Instagram">📷</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    /* ============================================================
+       PARTICLES SYSTEM
+    ============================================================ */
+    const canvas = document.getElementById('particles-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    const PARTICLE_COUNT = 60;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    class Particle {
+      constructor() { this.reset(); }
+      reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 2 + 0.5;
+        this.speedX = (Math.random() - 0.5) * 0.4;
+        this.speedY = (Math.random() - 0.5) * 0.4;
+        this.opacity = Math.random() * 0.4 + 0.1;
+        this.color = Math.random() > 0.5 ? '109,92,255' : '0,212,170';
+      }
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${this.color},${this.opacity})`;
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+
+    function drawLines() {
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 150) {
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(109,92,255,${0.06 * (1 - dist / 150)})`;
+            ctx.lineWidth = 0.5;
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    function animateParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => { p.update(); p.draw(); });
+      drawLines();
+      requestAnimationFrame(animateParticles);
+    }
+    animateParticles();
+
+    /* ============================================================
+       CUSTOM CURSOR
+    ============================================================ */
+    const cursorDot = document.getElementById('cursorDot');
+    const cursorRing = document.getElementById('cursorRing');
+    let cursorX = 0, cursorY = 0, ringX = 0, ringY = 0;
+
+    document.addEventListener('mousemove', (e) => {
+      cursorX = e.clientX;
+      cursorY = e.clientY;
+      cursorDot.style.left = cursorX + 'px';
+      cursorDot.style.top = cursorY + 'px';
+    });
+
+    // Smooth follow for ring
+    function animateCursorRing() {
+      ringX += (cursorX - ringX) * 0.12;
+      ringY += (cursorY - ringY) * 0.12;
+      cursorRing.style.left = ringX + 'px';
+      cursorRing.style.top = ringY + 'px';
+      requestAnimationFrame(animateCursorRing);
+    }
+    animateCursorRing();
+
+    // Hover detection for interactives
+    document.querySelectorAll('a, button, .btn, .store-btn, .nav-cta, .feature-card, .testimonial-card, .step, .comparison-card').forEach(el => {
+      el.addEventListener('mouseenter', () => {
+        cursorDot.classList.add('hovering');
+        cursorRing.classList.add('hovering');
+      });
+      el.addEventListener('mouseleave', () => {
+        cursorDot.classList.remove('hovering');
+        cursorRing.classList.remove('hovering');
+      });
+    });
+
+    /* ============================================================
+       SCROLL PROGRESS BAR — variable setup (merged listener below)
+    ============================================================ */
+    const scrollProgressBar = document.getElementById('scrollProgress');
+
+    /* ============================================================
+       SCROLL REVEAL (Intersection Observer) — Staggered
+    ============================================================ */
+    const observerOptions = { threshold: 0.08, rootMargin: '0px 0px -30px 0px' };
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, observerOptions);
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    /* ============================================================
+       ANIMATED COUNTERS
+    ============================================================ */
+    function animateNumber(el, endStr) {
+      const isPercent = endStr.includes('%');
+      const hasPlus = endStr.includes('+');
+      const isLessThan = endStr.includes('<');
+      const numMatch = endStr.match(/[\d.]+/);
+      if (!numMatch) return;
+      const end = parseFloat(numMatch[0]);
+      const duration = 2000;
+      const start = performance.now();
+
+      function tick(now) {
+        const elapsed = now - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = Math.round(eased * end);
+        let display = '';
+        if (isLessThan) display = '<' + current + 's';
+        else if (isPercent) display = current + '%';
+        else if (hasPlus) display = current + '+';
+        else display = current.toString();
+        el.textContent = display;
+        if (progress < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    const statObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !entry.target.dataset.counted) {
+          entry.target.dataset.counted = 'true';
+          const original = entry.target.textContent.trim();
+          animateNumber(entry.target, original);
+        }
+      });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('.stat-number').forEach(el => statObserver.observe(el));
+
+    /* ============================================================
+       TILT EFFECT on feature cards
+    ============================================================ */
+    document.querySelectorAll('.feature-card, .testimonial-card').forEach(card => {
+      card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const rotateX = ((y - centerY) / centerY) * -6;
+        const rotateY = ((x - centerX) / centerX) * 6;
+        card.style.transform = `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-8px) scale(1.02)`;
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = '';
+      });
+    });
+
+    /* ============================================================
+       UNIFIED SCROLL HANDLER — progress, parallax, navbar, section fade
+    ============================================================ */
+    const heroPhone = document.querySelector('.hero-phone');
+    const heroText = document.querySelector('.hero-text');
+    const allSections = document.querySelectorAll('.features, .how-it-works, .showcase, .testimonials, .download');
+    const navEl = document.getElementById('nav');
+    const getDocHeight = () => document.documentElement.scrollHeight - window.innerHeight;
+
+    window.addEventListener('scroll', () => {
+      const scrollY = window.scrollY;
+      const docH = getDocHeight() || 1;
+      const scrollFraction = scrollY / docH;
+
+      // 1. Scroll progress bar
+      if (scrollProgressBar) {
+        scrollProgressBar.style.width = (scrollFraction * 100) + '%';
+      }
+
+      // 2. Navbar
+      if (navEl) {
+        if (scrollY > 50) navEl.classList.add('scrolled');
+        else navEl.classList.remove('scrolled');
+      }
+
+      // 3. Hero parallax
+      if (heroPhone) heroPhone.style.transform = `translateY(${scrollY * 0.08}px)`;
+      if (heroText) heroText.style.transform = `translateY(${scrollY * 0.04}px)`;
+
+      // 4. Section brightness fade
+      const windowH = window.innerHeight;
+      allSections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        const visible = Math.min(1, Math.max(0, 1 - Math.abs(rect.top + rect.height / 2 - windowH / 2) / (windowH * 0.8)));
+        section.style.filter = `brightness(${0.5 + visible * 0.5})`;
+      });
+    }, { passive: true });
+
+    /* ============================================================
+       MOBILE NAV TOGGLE
+    ============================================================ */
+    const navToggle = document.getElementById('navToggle');
+    const navLinks = document.getElementById('navLinks');
+    navToggle.addEventListener('click', () => {
+      navLinks.classList.toggle('open');
+    });
+    navLinks.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        navLinks.classList.remove('open');
+      });
+    });
+
+    /* ============================================================
+       SMOOTH SCROLL for anchor links
+    ============================================================ */
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href');
+        if (targetId === '#') return;
+        const target = document.querySelector(targetId);
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    /* ============================================================
+       TYPED TEXT EFFECT in hero badge
+    ============================================================ */
+    const badgeEl = document.querySelector('.hero-badge');
+    if (badgeEl) {
+      const texts = [
+        'Now comparing 4+ ride providers',
+        'Save up to 23% on every ride',
+        'Real-time surge monitoring',
+        '100% free — no hidden fees'
+      ];
+      let textIndex = 0;
+      const dotEl = badgeEl.querySelector('.hero-badge-dot');
+      setInterval(() => {
+        textIndex = (textIndex + 1) % texts.length;
+        badgeEl.style.opacity = '0';
+        badgeEl.style.transform = 'translateY(-8px)';
+        setTimeout(() => {
+          badgeEl.textContent = '';
+          if (dotEl) badgeEl.appendChild(dotEl.cloneNode(true));
+          badgeEl.appendChild(document.createTextNode(' ' + texts[textIndex]));
+          badgeEl.style.opacity = '1';
+          badgeEl.style.transform = 'translateY(0)';
+        }, 300);
+      }, 3500);
+      badgeEl.style.transition = 'opacity 0.3s, transform 0.3s';
+    }
+
+    /* ============================================================
+       MOUSE GLOW FOLLOW
+    ============================================================ */
+    const mouseGlow = document.getElementById('mouseGlow');
+    document.addEventListener('mousemove', (e) => {
+      mouseGlow.style.left = e.clientX + 'px';
+      mouseGlow.style.top = e.clientY + 'px';
+    });
+
+    /* ============================================================
+       SPOTLIGHT EFFECT on feature cards & testimonial cards
+    ============================================================ */
+    document.querySelectorAll('.feature-card, .testimonial-card').forEach(card => {
+      const spotlight = document.createElement('div');
+      spotlight.className = 'card-spotlight';
+      card.appendChild(spotlight);
+      card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        spotlight.style.left = (e.clientX - rect.left) + 'px';
+        spotlight.style.top = (e.clientY - rect.top) + 'px';
+      });
+    });
+
+    /* ============================================================
+       TEXT SPLIT REVEAL — Section titles animate char by char
+    ============================================================ */
+    document.querySelectorAll('.section-title').forEach(title => {
+      if (title.querySelector('.hero-title-gradient')) return; // skip hero
+      const html = title.innerHTML;
+      title.innerHTML = '';
+      title.classList.add('split-text');
+      // Split on <br>, <br/>, <br /> to preserve line breaks
+      const segments = html.split(/<br\s*\/?>/i);
+      let charIndex = 0;
+      segments.forEach((seg, si) => {
+        // Strip any remaining HTML tags from segment text
+        const tmp = document.createElement('span');
+        tmp.innerHTML = seg;
+        const text = tmp.textContent || '';
+        text.split('').forEach((char) => {
+          const span = document.createElement('span');
+          span.className = 'char';
+          span.textContent = char === ' ' ? '\u00A0' : char;
+          span.style.transitionDelay = (charIndex * 0.025) + 's';
+          title.appendChild(span);
+          charIndex++;
+        });
+        if (si < segments.length - 1) {
+          title.appendChild(document.createElement('br'));
+        }
+      });
+    });
+
+    // Observe split-text for reveal
+    const splitObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+        }
+      });
+    }, { threshold: 0.2 });
+    document.querySelectorAll('.split-text').forEach(el => splitObserver.observe(el));
+
+    /* ============================================================
+       MAGNETIC BUTTONS — buttons pull toward cursor
+    ============================================================ */
+    document.querySelectorAll('.btn, .store-btn, .nav-cta').forEach(btn => {
+      btn.addEventListener('mousemove', (e) => {
+        const rect = btn.getBoundingClientRect();
+        const x = e.clientX - rect.left - rect.width / 2;
+        const y = e.clientY - rect.top - rect.height / 2;
+        btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px)`;
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.transform = '';
+        btn.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+        setTimeout(() => { btn.style.transition = ''; }, 400);
+      });
+    });
+
+    /* ============================================================
+       AMBIENT BACKGROUND — Subtle gradient glow system
+       Refined, industry-standard ambient lighting (Linear/Vercel style)
+    ============================================================ */
+    (function() {
+      const c = document.getElementById('bg3d-canvas');
+      if (!c) return;
+      const ctx = c.getContext('2d');
+
+      function resize() { c.width = innerWidth; c.height = innerHeight; }
+      resize();
+      addEventListener('resize', resize);
+
+      let mx = 0, my = 0;
+      addEventListener('mousemove', e => {
+        mx += ((e.clientX / innerWidth - 0.5) * 2 - mx) * 0.05;
+        my += ((e.clientY / innerHeight - 0.5) * 2 - my) * 0.05;
+      });
+
+      const TAU = Math.PI * 2;
+      let t = 0;
+
+      /* --- Ambient gradient blobs — slow, large, low-opacity --- */
+      const blobs = [
+        { x:0.2,  y:0.25, r:900,  c:[100,80,220],  o:0.08, ph:0,   ps:0.0008, dx:0.06, dy:0.04 },
+        { x:0.8,  y:0.2,  r:800,  c:[0,180,160],    o:0.06, ph:2.0, ps:0.0006, dx:0.05, dy:0.07 },
+        { x:0.5,  y:0.7,  r:1000, c:[90,60,200],    o:0.07, ph:4.0, ps:0.0007, dx:0.07, dy:0.05 },
+        { x:0.15, y:0.75, r:700,  c:[0,160,150],    o:0.05, ph:1.2, ps:0.0009, dx:0.04, dy:0.06 },
+        { x:0.85, y:0.6,  r:750,  c:[80,50,180],    o:0.06, ph:3.5, ps:0.0005, dx:0.05, dy:0.04 },
+      ];
+
+      function animate() {
+        t++;
+        ctx.clearRect(0, 0, c.width, c.height);
+
+        const sy = scrollY;
+        const hh = innerHeight;
+        const fade = Math.min(1, Math.max(0, (sy - hh * 0.3) / (hh * 0.5)));
+        if (fade <= 0) { requestAnimationFrame(animate); return; }
+        ctx.globalAlpha = fade;
+
+        const W = c.width, H = c.height;
+
+        /* --- Draw ambient blobs --- */
+        ctx.globalCompositeOperation = 'screen';
+        blobs.forEach(b => {
+          b.ph += b.ps;
+          const bx = (b.x + Math.sin(b.ph) * b.dx + mx * 0.015) * W;
+          const by = (b.y + Math.cos(b.ph * 0.7) * b.dy + my * 0.015) * H;
+          const pulse = 0.92 + Math.sin(b.ph * 0.8) * 0.08;
+          const r = b.r * pulse;
+          const [cr, cg, cb] = b.c;
+
+          const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+          g.addColorStop(0, `rgba(${cr},${cg},${cb},${b.o})`);
+          g.addColorStop(0.4, `rgba(${cr},${cg},${cb},${b.o * 0.45})`);
+          g.addColorStop(0.75, `rgba(${cr},${cg},${cb},${b.o * 0.1})`);
+          g.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(bx, by, r, 0, TAU);
+          ctx.fill();
+        });
+
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        requestAnimationFrame(animate);
+      }
+      animate();
+    })();
+
+  </script>
+</body>
+</html>

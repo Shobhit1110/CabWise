@@ -2,18 +2,35 @@ import React from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
   StyleSheet,
   Pressable,
   Alert,
   Platform,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useRideStore } from '../../store/rideStore';
 import { useQuotes } from '../../hooks/useQuotes';
+import { useThemeStore, spacing, radii, typography, shadows } from '../../store/themeStore';
+import { useFadeInUp, usePressAnimation } from '../../utils/animations';
+import { triggerHaptic } from '../../utils/haptics';
+import { shareComparison } from '../../utils/shareComparison';
 import { RideCard } from '../../components/rides/RideCard';
 import { launchProviderApp } from '../../utils/deepLink';
 import type { Quote } from '../../types';
+
+const PROVIDER_LOGO_IMAGES: Record<string, any> = {
+  uber: require('../../assets/providers/uber.png'),
+  bolt: require('../../assets/providers/bolt.png'),
+  freenow: require('../../assets/providers/freenow.png'),
+  wheely: require('../../assets/providers/wheely.png'),
+};
+
+const PROVIDER_FALLBACK: Record<string, { bg: string; text: string; label: string }> = {
+  mock: { bg: '#6366f1', text: '#fff', label: 'M' },
+};
 
 const TRAFFIC_LABELS: Record<string, { label: string; color: string }> = {
   light: { label: 'Light', color: '#10b981' },
@@ -21,11 +38,37 @@ const TRAFFIC_LABELS: Record<string, { label: string; color: string }> = {
   heavy: { label: 'Heavy', color: '#ef4444' },
 };
 
+function BreakdownRow({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+}) {
+  const { colors } = useThemeStore();
+  return (
+    <View style={styles.breakdownRow}>
+      <Text style={[styles.breakdownLabel, { color: highlight ? colors.warning : colors.textMuted }]}>
+        {label}
+      </Text>
+      <Text style={[styles.breakdownValue, { color: highlight ? colors.warning : colors.textSecondary }]}>
+        £{value.toFixed(2)}
+      </Text>
+    </View>
+  );
+}
+
 export default function RideCompareScreen() {
   const router = useRouter();
   const { selectedQuote, origin, destination, originLabel, destLabel } =
     useRideStore();
   const { quotes, allQuotes } = useQuotes();
+  const { colors } = useThemeStore();
+  const headerStyle = useFadeInUp();
+  const featuredStyle = useFadeInUp(150);
+  const { animatedStyle: bookPressStyle, onPressIn: bookPressIn, onPressOut: bookPressOut } = usePressAnimation();
 
   const featured = selectedQuote ?? quotes[0];
 
@@ -45,132 +88,174 @@ export default function RideCompareScreen() {
 
   if (!destination) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>Select a destination first</Text>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>Go back</Text>
+      <View style={[styles.emptyContainer, { backgroundColor: colors.bg }]}>
+        <Text style={{ fontSize: 48, marginBottom: spacing.md }}>◇</Text>
+        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Select a destination first</Text>
+        <Pressable style={[styles.backBtn, { backgroundColor: colors.accent }]} onPress={() => router.back()}>
+          <Text style={styles.backBtnText}>← Go back</Text>
         </Pressable>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.backArrow}>← Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Compare Rides</Text>
-      </View>
-
-      {/* Route summary */}
-      <View style={styles.routeCard}>
-        <View style={styles.routeRow}>
-          <View style={[styles.routeDot, styles.dotOrigin]} />
-          <Text style={styles.routeText}>{originLabel || 'Your location'}</Text>
-        </View>
-        <View style={styles.routeLine} />
-        <View style={styles.routeRow}>
-          <View style={[styles.routeDot, styles.dotDest]} />
-          <Text style={styles.routeText}>{destLabel}</Text>
-        </View>
-      </View>
-
-      {/* Featured ride detail */}
-      {featured && (
-        <View style={styles.featuredCard}>
-          <Text style={styles.featuredTitle}>Selected Ride</Text>
-          <View style={styles.featuredRow}>
-            <View>
-              <Text style={styles.featuredName}>{featured.name}</Text>
-              <Text style={styles.featuredSub}>
-                {Math.round(featured.etaSeconds / 60)} min ·{' '}
-                {featured.vehicleClass}
-              </Text>
-            </View>
-            <View style={styles.featuredPriceCol}>
-              <Text style={styles.featuredPrice}>
-                {featured.priceDisplay}
-              </Text>
-              {featured.fareBreakdown && (
-                <Text style={styles.featuredTotal}>
-                  est. £{featured.fareBreakdown.total.toFixed(2)}
-                </Text>
-              )}
-            </View>
-          </View>
-
-          {/* Fare breakdown */}
-          {featured.fareBreakdown && (
-            <View style={styles.breakdownTable}>
-              <BreakdownRow label="Base fare" value={featured.fareBreakdown.baseFare} />
-              <BreakdownRow label="Distance" value={featured.fareBreakdown.distanceCharge} />
-              <BreakdownRow label="Time" value={featured.fareBreakdown.timeCharge} />
-              {featured.fareBreakdown.surgePremium > 0 && (
-                <BreakdownRow
-                  label={`Surge (${featured.surgeMultiplier}x)`}
-                  value={featured.fareBreakdown.surgePremium}
-                  highlight
-                />
-              )}
-              {featured.fareBreakdown.tolls > 0 && (
-                <BreakdownRow label="Tolls" value={featured.fareBreakdown.tolls} />
-              )}
-              <BreakdownRow label="Booking fee" value={featured.fareBreakdown.bookingFee} />
-              <View style={styles.divider} />
-              <View style={styles.breakdownRow}>
-                <Text style={styles.totalLabel}>Estimated total</Text>
-                <Text style={styles.totalValue}>
-                  £{featured.fareBreakdown.total.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Traffic info */}
-          {featured.trafficLevel && (
-            <View style={styles.trafficRow}>
-              <View
-                style={[
-                  styles.trafficDot,
-                  {
-                    backgroundColor:
-                      TRAFFIC_LABELS[featured.trafficLevel]?.color || '#666',
-                  },
-                ]}
-              />
-              <Text style={styles.trafficLabel}>
-                {TRAFFIC_LABELS[featured.trafficLevel]?.label || featured.trafficLevel}{' '}
-                traffic
-                {featured.trafficDelayMins
-                  ? ` (+${featured.trafficDelayMins} min delay)`
-                  : ''}
-              </Text>
-            </View>
-          )}
-
-          <Pressable
-            style={styles.bookBtn}
-            onPress={() => handleBook(featured)}
+    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]} showsVerticalScrollIndicator={false}>
+      <Animated.View style={headerStyle}>
+        <View style={[styles.header, { backgroundColor: colors.card }]}>
+          <Pressable onPress={() => router.back()} style={[styles.backCircle, { backgroundColor: colors.chipBg }]}
+            accessibilityRole="button" accessibilityLabel="Go back"
           >
-            <Text style={styles.bookText}>
-              Book {featured.name} · {featured.priceDisplay}
-            </Text>
+            <Text style={[styles.backIcon, { color: colors.text }]}>←</Text>
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text }]}>Compare Rides</Text>
+          <Pressable
+            onPress={() => {
+              triggerHaptic('light');
+              shareComparison(quotes, originLabel || 'Your location', destLabel || '');
+            }}
+            style={[styles.backCircle, { backgroundColor: colors.chipBg }]}
+            accessibilityRole="button"
+            accessibilityLabel="Share ride comparison"
+          >
+            <Text style={[styles.backIcon, { color: colors.text }]}>↑</Text>
           </Pressable>
         </View>
+      </Animated.View>
+
+      <View style={[styles.routeCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+        <View style={styles.routeRow}>
+          <View style={[styles.routeDot, { backgroundColor: colors.success }]}>
+            <View style={styles.routeDotInner} />
+          </View>
+          <View style={styles.routeTextCol}>
+            <Text style={[styles.routeLabel, { color: colors.textMuted }]}>PICKUP</Text>
+            <Text style={[styles.routeText, { color: colors.text }]}>{originLabel || 'Your location'}</Text>
+          </View>
+        </View>
+        <View style={[styles.routeLine, { borderColor: colors.border }]} />
+        <View style={styles.routeRow}>
+          <View style={[styles.routeDot, { backgroundColor: colors.danger }]}>
+            <View style={styles.routeDotInner} />
+          </View>
+          <View style={styles.routeTextCol}>
+            <Text style={[styles.routeLabel, { color: colors.textMuted }]}>DROP-OFF</Text>
+            <Text style={[styles.routeText, { color: colors.text }]}>{destLabel}</Text>
+          </View>
+        </View>
+      </View>
+
+      {featured && (
+        <Animated.View style={featuredStyle}>
+          <View style={[styles.featuredCard, { backgroundColor: colors.card, borderColor: colors.accent, shadowColor: colors.shadow }]}>
+            <View style={[styles.featuredBadge, { backgroundColor: colors.accentSoft }]}>
+              <Text style={[styles.featuredBadgeText, { color: colors.accent }]}>● Selected Ride</Text>
+            </View>
+
+            <View style={styles.featuredRow}>
+              <View style={styles.featuredLeft}>
+                {PROVIDER_LOGO_IMAGES[featured.provider] ? (
+                  <Image source={PROVIDER_LOGO_IMAGES[featured.provider]} style={styles.featuredLogo} />
+                ) : (
+                  <View style={[styles.featuredLogoFallback, { backgroundColor: PROVIDER_FALLBACK[featured.provider]?.bg || '#666' }]}>
+                    <Text style={[styles.featuredLogoText, { color: PROVIDER_FALLBACK[featured.provider]?.text || '#fff' }]}>
+                      {PROVIDER_FALLBACK[featured.provider]?.label || featured.provider.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View>
+                  <Text style={[styles.featuredName, { color: colors.text }]}>{featured.name}</Text>
+                  <Text style={[styles.featuredSub, { color: colors.textMuted }]}>
+                    {Math.round(featured.etaSeconds / 60)} min · {featured.vehicleClass}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.featuredPriceCol}>
+                <Text style={[styles.featuredPrice, { color: colors.text }]}>
+                  {featured.priceDisplay}
+                </Text>
+                {featured.fareBreakdown && (
+                  <Text style={[styles.featuredTotal, { color: colors.textMuted }]}>
+                    est. £{featured.fareBreakdown.total.toFixed(2)}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {featured.fareBreakdown && (
+              <View style={[styles.breakdownTable, { backgroundColor: colors.bgSecondary }]}>
+                <BreakdownRow label="Base fare" value={featured.fareBreakdown.baseFare} />
+                <BreakdownRow label="Distance" value={featured.fareBreakdown.distanceCharge} />
+                <BreakdownRow label="Time" value={featured.fareBreakdown.timeCharge} />
+                {featured.fareBreakdown.surgePremium > 0 && (
+                  <BreakdownRow
+                    label={`Surge (${featured.surgeMultiplier}x)`}
+                    value={featured.fareBreakdown.surgePremium}
+                    highlight
+                  />
+                )}
+                {featured.fareBreakdown.tolls > 0 && (
+                  <BreakdownRow label="Tolls" value={featured.fareBreakdown.tolls} />
+                )}
+                <BreakdownRow label="Booking fee" value={featured.fareBreakdown.bookingFee} />
+                <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                <View style={styles.breakdownRow}>
+                  <Text style={[styles.totalLabel, { color: colors.text }]}>Estimated total</Text>
+                  <Text style={[styles.totalValue, { color: colors.text }]}>
+                    £{featured.fareBreakdown.total.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {featured.trafficLevel && (
+              <View style={[styles.trafficRow, { backgroundColor: colors.bgSecondary }]}>
+                <View
+                  style={[
+                    styles.trafficDot,
+                    { backgroundColor: TRAFFIC_LABELS[featured.trafficLevel]?.color || '#666' },
+                  ]}
+                />
+                <Text style={[styles.trafficLabel, { color: colors.textSecondary }]}>
+                  {TRAFFIC_LABELS[featured.trafficLevel]?.label || featured.trafficLevel}{' '}
+                  traffic
+                  {featured.trafficDelayMins ? ` (+${featured.trafficDelayMins} min)` : ''}
+                </Text>
+              </View>
+            )}
+
+            <Animated.View style={bookPressStyle}>
+              <Pressable
+                style={[styles.bookBtn, { backgroundColor: colors.accent, shadowColor: colors.accent }]}
+                onPress={() => { triggerHaptic('medium'); handleBook(featured); }}
+                onPressIn={bookPressIn}
+                onPressOut={bookPressOut}
+                accessibilityRole="button"
+                accessibilityLabel={`Book ${featured.name} for ${featured.priceDisplay}`}
+              >
+                <Text style={styles.bookText}>
+                  Book {featured.name} · {featured.priceDisplay}
+                </Text>
+              </Pressable>
+            </Animated.View>
+          </View>
+        </Animated.View>
       )}
 
-      {/* All quotes comparison */}
-      <Text style={styles.sectionTitle}>
-        All Available Rides ({allQuotes.length})
-      </Text>
+      <View style={styles.allSection}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          All Rides
+        </Text>
+        <Text style={[styles.sectionCount, { color: colors.textMuted }]}>
+          {allQuotes.length} available
+        </Text>
+      </View>
       <View style={styles.cardList}>
-        {quotes.map((q) => (
+        {quotes.map((q, i) => (
           <RideCard
             key={`${q.provider}-${q.productId}`}
             quote={q}
-            isBest={q === quotes[0]}
+            isBest={i === 0}
+            index={i}
             onPress={() => handleBook(q)}
           />
         ))}
@@ -180,158 +265,164 @@ export default function RideCompareScreen() {
   );
 }
 
-function BreakdownRow({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: number;
-  highlight?: boolean;
-}) {
-  return (
-    <View style={styles.breakdownRow}>
-      <Text style={[styles.breakdownLabel, highlight && styles.highlightLabel]}>
-        {label}
-      </Text>
-      <Text style={[styles.breakdownValue, highlight && styles.highlightValue]}>
-        £{value.toFixed(2)}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: spacing.xxl,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
+    ...typography.body,
+    marginBottom: spacing.lg,
   },
   backBtn: {
-    backgroundColor: '#111',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
   },
   backBtnText: {
     color: '#fff',
+    ...typography.callout,
     fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
     paddingTop: 56,
-    paddingBottom: 12,
-    backgroundColor: '#fff',
+    paddingBottom: spacing.md,
   },
-  backArrow: {
-    fontSize: 15,
-    color: '#3b82f6',
+  backCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backIcon: {
+    fontSize: 18,
     fontWeight: '600',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111',
+    ...typography.headline,
   },
   routeCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#eee',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    ...shadows.sm,
   },
   routeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: spacing.md,
   },
   routeDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dotOrigin: {
-    backgroundColor: '#10b981',
+  routeDotInner: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#fff',
   },
-  dotDest: {
-    backgroundColor: '#ef4444',
+  routeTextCol: {
+    flex: 1,
   },
-  routeLine: {
-    width: 2,
-    height: 20,
-    backgroundColor: '#ddd',
-    marginLeft: 5,
-    marginVertical: 2,
+  routeLabel: {
+    ...typography.micro,
+    letterSpacing: 1,
   },
   routeText: {
-    fontSize: 14,
-    color: '#333',
+    ...typography.callout,
+  },
+  routeLine: {
+    width: 0,
+    height: 16,
+    marginLeft: 6,
+    marginVertical: 3,
+    borderLeftWidth: 2,
+    borderStyle: 'dashed',
   },
   featuredCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 16,
-    borderRadius: 12,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
     borderWidth: 2,
-    borderColor: '#10b981',
+    ...shadows.md,
   },
-  featuredTitle: {
-    fontSize: 12,
-    color: '#10b981',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
+  featuredBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+    marginBottom: spacing.md,
+  },
+  featuredBadgeText: {
+    ...typography.micro,
   },
   featuredRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  featuredLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  featuredLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
+  featuredLogoFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featuredLogoText: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
   featuredName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111',
+    ...typography.headline,
   },
   featuredSub: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
+    ...typography.caption,
+    marginTop: 3,
   },
   featuredPriceCol: {
     alignItems: 'flex-end',
   },
   featuredPrice: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '800',
-    color: '#111',
+    letterSpacing: -0.5,
   },
   featuredTotal: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 1,
+    ...typography.caption,
+    marginTop: 2,
   },
   breakdownTable: {
-    marginTop: 14,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
+    marginTop: spacing.lg,
+    borderRadius: radii.md,
+    padding: spacing.md,
   },
   breakdownRow: {
     flexDirection: 'row',
@@ -339,41 +430,32 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   breakdownLabel: {
-    fontSize: 13,
-    color: '#666',
+    ...typography.caption,
   },
   breakdownValue: {
-    fontSize: 13,
-    color: '#333',
+    ...typography.caption,
     fontWeight: '500',
-  },
-  highlightLabel: {
-    color: '#f59e0b',
-  },
-  highlightValue: {
-    color: '#f59e0b',
-    fontWeight: '600',
   },
   divider: {
     height: 1,
-    backgroundColor: '#e5e7eb',
-    marginVertical: 6,
+    marginVertical: spacing.sm,
   },
   totalLabel: {
-    fontSize: 14,
+    ...typography.callout,
     fontWeight: '700',
-    color: '#111',
   },
   totalValue: {
-    fontSize: 14,
+    ...typography.callout,
     fontWeight: '700',
-    color: '#111',
   },
   trafficRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    gap: 6,
+    marginTop: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
   },
   trafficDot: {
     width: 8,
@@ -381,31 +463,37 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   trafficLabel: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
   },
   bookBtn: {
-    backgroundColor: '#111',
-    paddingVertical: 14,
-    borderRadius: 10,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: spacing.lg,
+    ...shadows.sm,
   },
   bookText: {
     color: '#fff',
-    fontSize: 15,
+    ...typography.body,
     fontWeight: '700',
+  },
+  allSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111',
-    marginHorizontal: 16,
-    marginTop: 20,
-    marginBottom: 8,
+    ...typography.headline,
+    fontSize: 16,
+  },
+  sectionCount: {
+    ...typography.caption,
   },
   cardList: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
   bottomPad: {
     height: 40,

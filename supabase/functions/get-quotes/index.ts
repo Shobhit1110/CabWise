@@ -1,5 +1,6 @@
 // Supabase Edge Function: /get-quotes
 // Runs server-side so API keys stay secret. Caches results in Upstash Redis.
+// Scaling features: OAuth token caching, circuit breakers, per-provider timeouts.
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { Redis } from 'https://esm.sh/@upstash/redis@1.28.0';
 
@@ -39,38 +40,124 @@ function cacheKey(origin: LatLng, dest: LatLng): string {
   return `quotes:${round(origin.lat)},${round(origin.lng)}:${round(dest.lat)},${round(dest.lng)}`;
 }
 
+// ─── Circuit Breaker ───
+// Tracks per-provider failures. Opens circuit after 3 consecutive failures,
+// auto-recovers after 30s cooldown with a single probe request.
+const CIRCUIT_STATE: Record<string, { failures: number; openedAt: number }> = {};
+const CIRCUIT_THRESHOLD = 3;
+const CIRCUIT_COOLDOWN_MS = 30_000;
+
+function isCircuitOpen(provider: string): boolean {
+  const state = CIRCUIT_STATE[provider];
+  if (!state || state.failures < CIRCUIT_THRESHOLD) return false;
+  if (Date.now() - state.openedAt > CIRCUIT_COOLDOWN_MS) {
+    // Half-open: allow one probe request
+    state.failures = CIRCUIT_THRESHOLD - 1;
+    return false;
+  }
+  return true;
+}
+
+function recordSuccess(provider: string): void {
+  delete CIRCUIT_STATE[provider];
+}
+
+function recordFailure(provider: string): void {
+  const state = CIRCUIT_STATE[provider] ?? { failures: 0, openedAt: 0 };
+  state.failures++;
+  if (state.failures >= CIRCUIT_THRESHOLD) {
+    state.openedAt = Date.now();
+  }
+  CIRCUIT_STATE[provider] = state;
+}
+
+// ─── OAuth Token Cache ───
+// Caches OAuth tokens in Redis to avoid fetching a new token on every request.
+// Falls back to direct fetch if Redis is unavailable.
+const OAUTH_TOKEN_BUFFER_SECS = 60; // refresh 60s before expiry
+
+async function getCachedOAuthToken(
+  provider: string,
+  fetchToken: () => Promise<{ access_token: string; expires_in?: number }>,
+): Promise<string | null> {
+  const r = getRedis();
+  const cacheKey = `oauth:${provider}`;
+
+  // Try cache first
+  if (r) {
+    try {
+      const cached = await r.get<string>(cacheKey);
+      if (cached) return cached;
+    } catch {
+      // cache miss — continue to fetch
+    }
+  }
+
+  // Fetch new token
+  try {
+    const { access_token, expires_in } = await fetchToken();
+    // Cache token (default 25 min if expires_in not provided)
+    if (r && access_token) {
+      const ttl = (expires_in ?? 1500) - OAUTH_TOKEN_BUFFER_SECS;
+      if (ttl > 0) {
+        try { await r.set(cacheKey, access_token, { ex: ttl }); } catch { /* non-fatal */ }
+      }
+    }
+    return access_token;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Provider timeout ───
+const PROVIDER_TIMEOUT_MS = 3000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number = PROVIDER_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Provider timeout')), ms),
+    ),
+  ]);
+}
+
 // — Uber Adapter —
 async function fetchUberQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]> {
   const clientId = Deno.env.get('UBER_CLIENT_ID') || '';
   const clientSecret = Deno.env.get('UBER_CLIENT_SECRET') || '';
   if (!clientId || !clientSecret) return [];
+  if (isCircuitOpen('uber')) return [];
 
   try {
-    // Server-side OAuth2 client credentials flow
-    const tokenRes = await fetch('https://login.uber.com/oauth/v2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'client_credentials',
-        scope: 'ride_request.estimate',
-      }),
+    const accessToken = await getCachedOAuthToken('uber', async () => {
+      const tokenRes = await withTimeout(fetch('https://login.uber.com/oauth/v2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: 'client_credentials',
+          scope: 'ride_request.estimate',
+        }),
+      }));
+      if (!tokenRes.ok) throw new Error(`Uber token ${tokenRes.status}`);
+      return tokenRes.json();
     });
-    if (!tokenRes.ok) return [];
-    const { access_token } = await tokenRes.json();
+
+    if (!accessToken) { recordFailure('uber'); return []; }
 
     const url =
       `https://api.uber.com/v1.2/estimates/price?` +
       `start_latitude=${origin.lat}&start_longitude=${origin.lng}` +
       `&end_latitude=${dest.lat}&end_longitude=${dest.lng}`;
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
-    if (!res.ok) return [];
+    const res = await withTimeout(fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }));
+    if (!res.ok) { recordFailure('uber'); return []; }
 
     const data = await res.json();
+    recordSuccess('uber');
     return (data.prices || []).map((p: any) => ({
       provider: 'uber',
       productId: p.product_id,
@@ -91,6 +178,7 @@ async function fetchUberQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]> {
     }));
   } catch (e) {
     console.error('Uber error:', e);
+    recordFailure('uber');
     return [];
   }
 }
@@ -107,9 +195,10 @@ function mapUberClass(name: string): string {
 async function fetchBoltQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]> {
   const apiKey = Deno.env.get('BOLT_API_KEY') || '';
   if (!apiKey) return [];
+  if (isCircuitOpen('bolt')) return [];
 
   try {
-    const res = await fetch('https://node.bolt.eu/booking/v1/price-estimates', {
+    const res = await withTimeout(fetch('https://node.bolt.eu/booking/v1/price-estimates', {
       method: 'POST',
       headers: {
         'Api-key': apiKey,
@@ -120,10 +209,11 @@ async function fetchBoltQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]> {
         destination: { lat: dest.lat, lng: dest.lng },
         currency: 'GBP',
       }),
-    });
-    if (!res.ok) return [];
+    }));
+    if (!res.ok) { recordFailure('bolt'); return []; }
 
     const data = await res.json();
+    recordSuccess('bolt');
     return (data.categories || []).map((c: any) => ({
       provider: 'bolt',
       productId: c.id,
@@ -142,6 +232,7 @@ async function fetchBoltQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]> {
     }));
   } catch (e) {
     console.error('Bolt error:', e);
+    recordFailure('bolt');
     return [];
   }
 }
@@ -158,32 +249,37 @@ async function fetchFreeNowQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]
   const clientId = Deno.env.get('FREENOW_CLIENT_ID') || '';
   const clientSecret = Deno.env.get('FREENOW_CLIENT_SECRET') || '';
   if (!clientId || !clientSecret) return [];
+  if (isCircuitOpen('freenow')) return [];
 
   try {
-    // OAuth2 client credentials
-    const tokenRes = await fetch('https://auth.free-now.com/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'client_credentials',
-      }),
+    const accessToken = await getCachedOAuthToken('freenow', async () => {
+      const tokenRes = await withTimeout(fetch('https://auth.free-now.com/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: 'client_credentials',
+        }),
+      }));
+      if (!tokenRes.ok) throw new Error(`FreeNow token ${tokenRes.status}`);
+      return tokenRes.json();
     });
-    if (!tokenRes.ok) return [];
-    const { access_token } = await tokenRes.json();
+
+    if (!accessToken) { recordFailure('freenow'); return []; }
 
     const url =
       `https://api.free-now.com/v1/ride/quotes?` +
       `pickupLatitude=${origin.lat}&pickupLongitude=${origin.lng}` +
       `&destinationLatitude=${dest.lat}&destinationLongitude=${dest.lng}`;
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
-    if (!res.ok) return [];
+    const res = await withTimeout(fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }));
+    if (!res.ok) { recordFailure('freenow'); return []; }
 
     const data = await res.json();
+    recordSuccess('freenow');
     return (data.quotes || []).map((q: any) => ({
       provider: 'freenow',
       productId: q.serviceType || 'freenow-standard',
@@ -202,6 +298,7 @@ async function fetchFreeNowQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]
     }));
   } catch (e) {
     console.error('FreeNow error:', e);
+    recordFailure('freenow');
     return [];
   }
 }
@@ -217,9 +314,10 @@ function mapFreeNowClass(serviceType: string): string {
 async function fetchWheelyQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]> {
   const apiKey = Deno.env.get('WHEELY_API_KEY') || '';
   if (!apiKey) return [];
+  if (isCircuitOpen('wheely')) return [];
 
   try {
-    const res = await fetch('https://api.wheely.com/v3/tariffs/estimate', {
+    const res = await withTimeout(fetch('https://api.wheely.com/v3/tariffs/estimate', {
       method: 'POST',
       headers: {
         'X-Api-Key': apiKey,
@@ -230,10 +328,11 @@ async function fetchWheelyQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]>
         destination: { latitude: dest.lat, longitude: dest.lng },
         currency: 'GBP',
       }),
-    });
-    if (!res.ok) return [];
+    }));
+    if (!res.ok) { recordFailure('wheely'); return []; }
 
     const data = await res.json();
+    recordSuccess('wheely');
     return (data.tariffs || []).map((t: any) => ({
       provider: 'wheely',
       productId: t.id || 'wheely-business',
@@ -252,6 +351,7 @@ async function fetchWheelyQuotes(origin: LatLng, dest: LatLng): Promise<Quote[]>
     }));
   } catch (e) {
     console.error('Wheely error:', e);
+    recordFailure('wheely');
     return [];
   }
 }
@@ -304,7 +404,7 @@ serve(async (req: Request) => {
       }
     }
 
-    // Fan out to all providers
+    // Fan out to all providers (circuit breaker skips broken ones)
     const results = await Promise.allSettled([
       fetchUberQuotes(origin, destination),
       fetchBoltQuotes(origin, destination),
@@ -316,10 +416,10 @@ serve(async (req: Request) => {
       .filter((r): r is PromiseFulfilledResult<Quote[]> => r.status === 'fulfilled')
       .flatMap((r) => r.value);
 
-    // Cache for 20 seconds
+    // Cache for 45 seconds (longer TTL reduces provider API calls)
     if (r && quotes.length > 0) {
       try {
-        await r.set(key, JSON.stringify(quotes), { ex: 20 });
+        await r.set(key, JSON.stringify(quotes), { ex: 45 });
       } catch {
         // cache write failure is non-fatal
       }

@@ -1,17 +1,40 @@
-import type { LatLng, Quote, VehicleClass } from '../types';
+import type { LatLng, PickupPoint, Quote, VehicleClass } from '../types';
 
 export type Filter = 'cheapest' | 'fastest' | 'shared' | 'premium' | 'electric';
 
-export function pickupScore(point: any, userLocation: LatLng) {
-  const walkMinutes = point.avgWalkSecs / 60;
-  const saving = point.avgSavingGBP;
-  if (point.distanceMetres > 600) return 0;
-  return saving / Math.max(walkMinutes, 0.5);
+const WALK_SPEED_M_PER_MIN = 78; // ~1.3 m/s average walking speed
+const MAX_RADIUS_M = 600;
+const MAX_POPULARITY_BOOST = 0.3;
+
+/**
+ * Compute a pickup score that mirrors the server-side formula:
+ *   (savings / walkMinutes) * distanceDecay * popularityFactor * ratingFactor
+ *
+ * - walkMinutes derived from real distance (not static avg_walk_secs)
+ * - distanceDecay: linear falloff 1→0 over the radius so closer = better
+ * - popularityFactor: mild boost for proven high-traffic spots
+ * - ratingFactor: scale by point quality rating
+ */
+export function pickupScore(point: PickupPoint): number {
+  const dist = point.distanceMetres;
+  if (dist > MAX_RADIUS_M) return 0;
+
+  const walkMinutes = Math.max(dist / WALK_SPEED_M_PER_MIN, 0.5);
+  const savingsEfficiency = point.avgSavingGBP / walkMinutes;
+
+  const distanceDecay = Math.max(1 - dist / MAX_RADIUS_M, 0);
+
+  const popularity = Math.log(Math.max(point.weeklyRides ?? 0, 1) + 1);
+  const popularityFactor = 1 + Math.min(popularity / 10, MAX_POPULARITY_BOOST);
+
+  const ratingFactor = (point.rating ?? 4.0) / 5.0;
+
+  return savingsEfficiency * distanceDecay * popularityFactor * ratingFactor;
 }
 
-export function rankPickupPoints(points: any[], userLocation: LatLng) {
+export function rankPickupPoints(points: PickupPoint[]): PickupPoint[] {
   return points
-    .map((p) => ({ ...p, score: pickupScore(p, userLocation) }))
+    .map((p) => ({ ...p, score: pickupScore(p) }))
     .filter((p) => p.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 4);
